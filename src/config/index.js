@@ -126,6 +126,28 @@ function resolveCookieSecure() {
   return false;
 }
 
+/**
+ * Host-side location of the data directory, for when the panel itself runs in
+ * a container. Bind mounts handed to the Docker daemon are resolved against the
+ * HOST filesystem, so a containerized panel (which sees its data at DATA_DIR,
+ * e.g. /data) must describe that same directory in host terms when creating
+ * server containers. Unset — the bare-metal case — it equals dataDir and the
+ * translation is a no-op.
+ */
+function resolveDataDirHost() {
+  const raw = (process.env.DATA_DIR_HOST || '').trim();
+  if (!raw) return dataDir;
+  const isAbsolute = raw.startsWith('/') || /^[A-Za-z]:[\\/]/.test(raw);
+  if (!isAbsolute) {
+    throw new Error(
+      `DATA_DIR_HOST must be an absolute host path (e.g. /opt/msm/data or C:\\msm\\data) — got "${raw}". ` +
+        'It is the host-side path of the directory mounted at DATA_DIR inside the panel container.'
+    );
+  }
+  const trimmed = raw.replace(/[\\/]+$/, '');
+  return trimmed === '' ? '/' : trimmed;
+}
+
 const host = process.env.PANEL_HOST || '127.0.0.1';
 
 /**
@@ -136,6 +158,7 @@ const host = process.env.PANEL_HOST || '127.0.0.1';
 const config = {
   root,
   dataDir,
+  dataDirHost: resolveDataDirHost(),
   // Bind to localhost only by default — the panel is reachable just from this
   // machine out of the box. Set PANEL_HOST=0.0.0.0 to expose it to your LAN,
   // and only put it on the internet behind a reverse proxy with TLS.

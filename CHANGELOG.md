@@ -5,6 +5,45 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each push is cut as a new release with
 its own dated entry.
 
+## [0.9.0] - 2026-08-09
+
+Containerized deployment (closes [#1](https://github.com/anefzaoui/minecraft-server-manager/issues/1)):
+the panel itself can now run as a Docker container, with a pre-built multi-arch image on GHCR and an
+official compose file — no clone-and-build needed for Portainer/Dockge-style hosts.
+
+### Added
+
+- **Pre-built image on GHCR** — a new `Docker` workflow publishes
+  `ghcr.io/anefzaoui/minecraft-server-manager` (`:latest` + immutable `:v<version>`) for
+  linux/amd64 and linux/arm64 on every push to main.
+- **`Dockerfile`** — two-stage build: full install + Tailwind CSS compile in the build stage,
+  production-only `node_modules` in the runtime stage (`views/`, `src/`, and the built `public/`
+  included; `scripts/` is copied before `npm ci` so the postinstall hook resolves, with
+  `MSM_SKIP_POSTINSTALL` deferring the CSS build to its explicit step). Ships
+  container-appropriate defaults (`PANEL_HOST=0.0.0.0`, `DATA_DIR=/data`) and a `/login`
+  healthcheck.
+- **Official `docker-compose.yml`** — single required variable (`DATA_DIR_HOST`), used both as the
+  `/data` bind source and passed to the panel; mounts the host Docker socket; documents
+  reverse-proxy and secret-pinning options inline. Game ports need no mapping here — servers are
+  sibling containers that publish directly on the host.
+- **`DATA_DIR_HOST` host-path translation** — the piece that makes a containerized panel actually
+  work: bind mounts are resolved by the Docker daemon against the _host_ filesystem, so a panel
+  that sees its data at `/data` must describe it in host terms when creating server containers.
+  New `src/docker/hostPath.js` re-roots every panel-local path at the Docker boundary (server
+  `/data` binds plus the root-container `rm`/`chown` fallbacks), refuses paths outside `DATA_DIR`,
+  follows the host's path-separator convention (Linux container ↔ Windows daemon and vice versa),
+  and is the identity when `DATA_DIR_HOST` is unset (bare metal — behavior unchanged). Config
+  validates that `DATA_DIR_HOST` is absolute and fails fast otherwise. Covered by a new
+  `test/hostPath.test.js` suite.
+- **README**: new "Run the panel itself in Docker" section (quick start, sibling-container model,
+  why `DATA_DIR_HOST` exists, reverse-proxy binding, docker-socket security note) and a
+  `DATA_DIR_HOST` row in the env table; `.env.example` documents the variable.
+
+### Changed
+
+- `containers.createContainer` takes `spec.dataDir` (panel-local, re-rooted internally) instead of
+  `spec.dataDirHost`; `removeDataDir`/`chownDataDir` likewise translate at the bind site.
+
 ## [0.8.0] - 2026-07-16
 
 Full-surface UI overhaul: every page, tab, partial, layout and page script audited

@@ -1,0 +1,35 @@
+# Official compose file for running the PANEL itself in Docker.
+#
+# The panel talks to the HOST's Docker daemon and creates each Minecraft server
+# as a SIBLING container — game ports are published by those containers
+# directly, so only the panel port appears below.
+#
+# One variable is required: DATA_DIR_HOST — the ABSOLUTE host path where all
+# panel data (worlds, mods, backups, DB) should live. Set it in a `.env` file
+# next to this compose file (or in your Portainer/Dockge stack environment):
+#
+#   DATA_DIR_HOST=/opt/msm/data
+#
+# It is used twice on purpose: as the bind-mount source, and passed into the
+# panel so the paths it hands the Docker daemon are host paths, not
+# container-local ones.
+services:
+  panel:
+    image: ghcr.io/anefzaoui/minecraft-server-manager:latest
+    container_name: minecraft-server-manager
+    restart: unless-stopped
+    ports:
+      # Web UI. Change the left side to move it; the panel itself listens on
+      # 25564 in-container. Bind to 127.0.0.1:25564 if a reverse proxy fronts it.
+      - '25564:25564'
+    environment:
+      DATA_DIR_HOST: ${DATA_DIR_HOST:?Set DATA_DIR_HOST to the absolute host path for panel data, e.g. /opt/msm/data}
+      # Behind a TLS-terminating reverse proxy? See the README env table:
+      # TRUST_PROXY: '1'
+      # COOKIE_SECURE: auto
+      # Pin the session/crypto secret instead of the auto-generated one:
+      # SESSION_SECRET: change-me-to-a-long-random-string
+    volumes:
+      - ${DATA_DIR_HOST}:/data
+      # The panel manages servers through the host daemon (create/start/exec).
+      - /var/run/docker.sock:/var/run/docker.sock

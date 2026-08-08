@@ -159,11 +159,44 @@ You do **not** need to set anything in `.env` to start: on first run the panel g
 random secret and persists it under your data directory (`data/.session-secret`). Set `SESSION_SECRET`
 yourself only if you want to control it (e.g. to share one across replicas).
 
+### Run the panel itself in Docker
+
+A pre-built multi-arch image (amd64 + arm64) is published to GHCR on every release:
+`ghcr.io/anefzaoui/minecraft-server-manager:latest` (or pin a version tag, e.g. `:v0.9.0`).
+Grab the [docker-compose.yml](docker-compose.yml) from the repo root, set **one** variable, and start:
+
+```bash
+mkdir -p /opt/msm/data
+echo "DATA_DIR_HOST=/opt/msm/data" > .env   # ABSOLUTE host path for all panel data
+docker compose up -d
+```
+
+Open **http://your-host:25564**. In Portainer/Dockge, paste the compose file as a stack and set
+`DATA_DIR_HOST` in the stack's environment.
+
+How it works — and what to know:
+
+- The panel drives the **host's Docker daemon** through the mounted `/var/run/docker.sock` and creates
+  each Minecraft server as a **sibling container** (not a child). Game ports are published by those
+  containers directly on the host, so the panel container itself only exposes the web UI port.
+- `DATA_DIR_HOST` is required and must be the **absolute host path** of the directory mounted at
+  `/data`: bind mounts are resolved by the daemon against the **host** filesystem, so the panel
+  re-roots every path it hands to Docker from its container-local view onto that host path. Without
+  it the daemon would mount host directories that don't exist.
+- The container binds to `0.0.0.0` **inside its own network namespace**; publish `127.0.0.1:25564:25564`
+  instead of `25564:25564` if a reverse proxy on the host fronts the panel (then set `TRUST_PROXY` +
+  `COOKIE_SECURE`).
+- Anything that holds the Docker socket is root-equivalent on the host — treat the panel's admin
+  login accordingly and never expose the UI raw to the internet.
+- Docker Desktop (Windows/macOS) is not a target for this mode — run the panel natively there;
+  containerized deployment is aimed at Linux hosts (Portainer, Dockge, plain compose).
+
 ### Configuration (`.env`, all optional)
 
 | Variable                                                                    | Default                    | Purpose                                                                                                                                                          |
 | --------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DATA_DIR`                                                                  | `./data`                   | Root for **all** panel state (DB, server data, backups, library).                                                                                                |
+| `DATA_DIR_HOST`                                                             | = `DATA_DIR`               | Only when the panel runs **in a container**: the absolute host path of the `DATA_DIR` mount, used to re-root bind mounts for the host daemon.                    |
 | `PANEL_HOST` / `PANEL_PORT`                                                 | `127.0.0.1` / `25564`      | Web UI bind address + port. Localhost-only by default; set `PANEL_HOST=0.0.0.0` for LAN access.                                                                  |
 | `SESSION_SECRET`                                                            | auto-generated             | Signs session cookies + derives the at-rest encryption key. Auto-created and persisted if unset.                                                                 |
 | `TRUST_PROXY` / `COOKIE_SECURE`                                             | —                          | Set when behind a TLS-terminating reverse proxy, so `req.ip` (rate-limiting) and `Secure` cookies work.                                                          |

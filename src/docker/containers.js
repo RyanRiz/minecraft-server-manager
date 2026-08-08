@@ -6,6 +6,7 @@
 
 const path = require('node:path');
 const { getDocker } = require('./connect');
+const { toHostPath } = require('./hostPath');
 
 const LABEL = 'msm.id';
 const GAME_PORT = '25565';
@@ -22,7 +23,7 @@ function containerName(serverId) {
  * @param {string} spec.serverId
  * @param {string} spec.image            e.g. itzg/minecraft-server:java21
  * @param {object} spec.env              flat { KEY: 'value' }
- * @param {string} spec.dataDirHost      absolute host path bind-mounted to /data
+ * @param {string} spec.dataDir          absolute panel-local data dir, re-rooted to the host and bind-mounted to /data
  * @param {object} spec.ports            { game, rcon, bedrock? } host ports
  * @param {object} spec.resources        { memoryMb, swapMb, cpus }
  */
@@ -60,7 +61,7 @@ async function createContainer(spec) {
     Tty: false,
     OpenStdin: false,
     HostConfig: {
-      Binds: [`${spec.dataDirHost}:/data`],
+      Binds: [`${toHostPath(spec.dataDir)}:/data`],
       PortBindings: bindings,
       Memory: memoryBytes,
       MemorySwap: swapBytes,
@@ -195,17 +196,17 @@ async function execCapture(serverId, cmd, { timeoutMs = 15000 } = {}) {
  * the PARENT directory and remove the target by name. `Cmd: []` is required so
  * the image's default CMD isn't appended as extra arguments to our entrypoint.
  */
-async function removeDataDir(hostDir, image) {
+async function removeDataDir(dir, image) {
   const docker = getDocker();
-  const parent = path.dirname(hostDir);
-  const base = path.basename(hostDir);
+  const parent = path.dirname(dir);
+  const base = path.basename(dir);
   const container = await docker.createContainer({
     Image: image,
     Entrypoint: ['rm', '-rf', `/work/${base}`],
     Cmd: [],
     User: '0:0',
     Labels: { 'msm.managed': 'true', 'msm.role': 'cleanup' },
-    HostConfig: { Binds: [`${parent}:/work`], AutoRemove: false, NetworkMode: 'none' },
+    HostConfig: { Binds: [`${toHostPath(parent)}:/work`], AutoRemove: false, NetworkMode: 'none' },
   });
   try {
     await container.start();
@@ -224,17 +225,17 @@ async function removeDataDir(hostDir, image) {
  * the panel (running as uid:gid) can manage them. Mounts the PARENT and chowns
  * the target by name; `Cmd: []` clears the image's default CMD (see removeDataDir).
  */
-async function chownDataDir(hostDir, image, uid, gid) {
+async function chownDataDir(dir, image, uid, gid) {
   const docker = getDocker();
-  const parent = path.dirname(hostDir);
-  const base = path.basename(hostDir);
+  const parent = path.dirname(dir);
+  const base = path.basename(dir);
   const container = await docker.createContainer({
     Image: image,
     Entrypoint: ['chown', '-R', `${uid}:${gid}`, `/work/${base}`],
     Cmd: [],
     User: '0:0',
     Labels: { 'msm.managed': 'true', 'msm.role': 'chown' },
-    HostConfig: { Binds: [`${parent}:/work`], AutoRemove: false, NetworkMode: 'none' },
+    HostConfig: { Binds: [`${toHostPath(parent)}:/work`], AutoRemove: false, NetworkMode: 'none' },
   });
   try {
     await container.start();
