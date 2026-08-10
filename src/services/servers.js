@@ -19,6 +19,7 @@ const containers = require('../docker/containers');
 const images = require('../docker/images');
 const { fetchLogs } = require('../docker/logs');
 const dockerSpec = require('./dockerSpec');
+const settings = require('./settings');
 
 function rowToServer(row) {
   if (!row) return null;
@@ -74,6 +75,11 @@ function assembleEnv(server) {
   }
   env.RCON_PASSWORD = rconPassword;
   env.STOP_DURATION = env.STOP_DURATION || '60';
+  // The itzg image defaults TZ to UTC, which makes the JVM's own console
+  // timestamps disagree with every other time shown in the panel (which
+  // uses the configured panel timezone). Inherit it unless the user set
+  // their own TZ for this server via the advanced env fields.
+  env.TZ = env.TZ || settings.getTimezone();
   // CurseForge features need the API key inside the container. It lives in
   // the panel's encrypted store — inject it whenever anything CF is in play.
   const usesCurseforge =
