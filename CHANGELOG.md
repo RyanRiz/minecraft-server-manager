@@ -5,6 +5,24 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each push is cut as a new release with
 its own dated entry.
 
+## [0.9.5] - 2026-08-10
+
+Server containers now actually run in the panel's configured timezone, instead of only the
+scheduler ([0.9.3]) and BlueMap's map configs ([0.9.4]) knowing about it.
+
+### Fixed
+
+- **Container clock stayed on UTC regardless of Settings → Localization** — `assembleEnv()` in
+  `src/services/servers.js` built every container's env without ever setting `TZ`, so the itzg
+  image defaulted it to UTC. The Minecraft server's own console timestamps, and any other
+  in-container tooling that reads `TZ` (e.g. `mc-server-runner`'s own log lines), stayed in UTC
+  even after the panel's timezone was set to something else. `assembleEnv()` now defaults
+  `env.TZ` to `settings.getTimezone()` when a server doesn't already set its own `TZ` via the
+  advanced env fields.
+  - This only takes effect on container **creation** — an already-running server needs to be
+    recreated (not just restarted) to pick up the new env var, same as any other advanced
+    Docker setting change.
+
 ## [0.9.4] - 2026-08-10
 
 Fixes the live map (BlueMap) failing entirely on any server whose world isn't literally named
