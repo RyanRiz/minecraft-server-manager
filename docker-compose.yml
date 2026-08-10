@@ -22,6 +22,13 @@ services:
       # Web UI. Change the left side to move it; the panel itself listens on
       # 25564 in-container. Bind to 127.0.0.1:25564 if a reverse proxy fronts it.
       - '25564:25564'
+    extra_hosts:
+      # Lets the panel container reach sibling containers' HOST-published ports
+      # (e.g. BlueMap's live map) via host.docker.internal — its own
+      # 127.0.0.1 is not the host's. Docker Desktop resolves this name for
+      # free; plain Linux Engine (this deployment's target) needs it mapped
+      # explicitly. Requires Docker Engine 20.10+.
+      - 'host.docker.internal:host-gateway'
     environment:
       DATA_DIR_HOST: ${DATA_DIR_HOST:?Set DATA_DIR_HOST to the absolute host path for panel data, e.g. /opt/msm/data}
       # Behind a TLS-terminating reverse proxy? See the README env table:

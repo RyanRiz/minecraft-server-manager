@@ -53,6 +53,37 @@ test('a too-short SESSION_SECRET fails fast', () => {
   assert.match(res.stderr, /SESSION_SECRET/);
 });
 
+function loadMapProxyHost(extraEnv) {
+  const res = spawnSync(process.execPath, ['-e', "process.stdout.write(require('./src/config').mapProxyHost)"], {
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      DATA_DIR: process.env.DATA_DIR,
+      SESSION_SECRET: 'valid-session-secret-abcdef123456',
+      PANEL_PORT: '',
+      DATA_DIR_HOST: '',
+      MAP_PROXY_HOST: '',
+      ...extraEnv,
+    },
+    encoding: 'utf8',
+  });
+  assert.equal(res.status, 0, res.stderr);
+  return res.stdout;
+}
+
+test('mapProxyHost is 127.0.0.1 on bare metal (no DATA_DIR_HOST)', () => {
+  assert.equal(loadMapProxyHost({}), '127.0.0.1');
+});
+
+test('mapProxyHost switches to host.docker.internal once DATA_DIR_HOST is set (containerized panel)', () => {
+  assert.equal(loadMapProxyHost({ DATA_DIR_HOST: '/opt/msm/data' }), 'host.docker.internal');
+});
+
+test('MAP_PROXY_HOST always wins, containerized or not', () => {
+  assert.equal(loadMapProxyHost({ MAP_PROXY_HOST: '10.0.0.5' }), '10.0.0.5');
+  assert.equal(loadMapProxyHost({ DATA_DIR_HOST: '/opt/msm/data', MAP_PROXY_HOST: '10.0.0.5' }), '10.0.0.5');
+});
+
 test('TRUST_PROXY / COOKIE_SECURE resolve to usable values', () => {
   const res = spawnSync(
     process.execPath,

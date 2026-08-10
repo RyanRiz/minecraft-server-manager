@@ -148,6 +148,24 @@ function resolveDataDirHost() {
   return trimmed === '' ? '/' : trimmed;
 }
 
+/**
+ * Address the panel uses to reach OTHER containers' host-published ports (e.g.
+ * BlueMap's map webserver) — used by the /map proxy. Bare metal, the panel's
+ * own '127.0.0.1' IS the host's, so no translation is needed. Containerized
+ * (same signal as resolveDataDirHost — DATA_DIR_HOST set), '127.0.0.1' is the
+ * PANEL container's own loopback, not the host's, so sibling containers'
+ * published ports are unreachable through it; 'host.docker.internal' is
+ * Docker's own mechanism for "reach the host from inside a container" (needs
+ * `extra_hosts: host.docker.internal:host-gateway` on plain Linux Engine —
+ * see docker-compose.yml — Docker Desktop resolves it natively, but
+ * containerized-panel deployment targets Linux).
+ */
+function resolveMapProxyHost() {
+  const raw = (process.env.MAP_PROXY_HOST || '').trim();
+  if (raw) return raw;
+  return resolveDataDirHost() === dataDir ? '127.0.0.1' : 'host.docker.internal';
+}
+
 const host = process.env.PANEL_HOST || '127.0.0.1';
 
 /**
@@ -174,6 +192,7 @@ const config = {
   cfApiKeySeed: process.env.CF_API_KEY || '',
   trustProxy: resolveTrustProxy(),
   cookieSecure: resolveCookieSecure(),
+  mapProxyHost: resolveMapProxyHost(),
 
   // Docker image repository for Minecraft servers. Override for a private mirror
   // or air-gapped registry; the panel is otherwise an itzg/minecraft-server front-end.
