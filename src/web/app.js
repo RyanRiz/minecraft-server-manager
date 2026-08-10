@@ -143,6 +143,17 @@ function createApp() {
   app.set('view engine', 'hbs');
   app.set('views', path.join(config.root, 'views'));
 
+  // express.static's default `Cache-Control: public, max-age=0` still lets a
+  // browser or reverse proxy (Pangolin, NGINX, Traefik…) decide for itself
+  // whether/how long to trust a cached copy without checking back — some do,
+  // which meant a JS fix could ship and still not reach anyone until they
+  // cleared their cache. `no-cache` forces a revalidation round-trip (still
+  // 304s when nothing changed — this isn't `no-store`) on every request, so a
+  // new deploy is guaranteed visible on the very next page load.
+  app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    next();
+  });
   app.use(express.static(path.join(config.root, 'public')));
   app.use(express.urlencoded({ extended: true }));
   app.use(express.json());
