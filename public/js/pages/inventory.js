@@ -10,6 +10,7 @@ import { confirmDialog } from '../lib/confirm.js';
 import { openItemBrowser } from '../lib/itemBrowser.js';
 import { withBusy } from '../lib/loading.js';
 import { PLAYER_NAME_RE } from '../lib/playerName.js';
+import { glyphFor } from '../lib/itemGlyph.js';
 
 const root = document.querySelector('[data-inventory-root]');
 if (root) init(root);
@@ -172,7 +173,15 @@ function init(root) {
         img.loading = 'lazy';
         img.src = `${iconBase}/${item.id.slice('minecraft:'.length)}.png`;
         img.addEventListener('load', () => abbrevEl?.classList.add('hidden'));
-        img.addEventListener('error', () => img.remove()); // miss — text abbreviation (never hidden) stands in
+        img.addEventListener('error', () => {
+          // No local texture (bed/banner/chest/head/… — see itemGlyph.js) —
+          // a purpose-built glyph beats the 2-3 letter text abbreviation.
+          const glyph = document.createElement('span');
+          glyph.className = 'pointer-events-none absolute inset-1';
+          glyph.innerHTML = glyphFor(item.id);
+          img.replaceWith(glyph);
+          abbrevEl?.classList.add('hidden');
+        });
         cell.appendChild(img);
       }
     }

@@ -10,6 +10,7 @@ import { openModal } from './modal.js';
 import { toast } from './toast.js';
 import { runTask } from './progress.js';
 import { withBusy } from './loading.js';
+import { glyphFor } from './itemGlyph.js';
 
 const PAGE = 100;
 const KINDS = [
@@ -24,12 +25,6 @@ function esc(s) {
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
   );
 }
-
-// Generic fallback glyph for items with no texture (modded items — minecraft-
-// assets only covers vanilla — or the rare vanilla id it doesn't have).
-const FALLBACK_ICON =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" class="size-full text-ink-faint">' +
-  '<path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
 
 export function openItemBrowser({ serverId, onPick, onManual } = {}) {
   const base = `/api/servers/${serverId}/items`;
@@ -81,7 +76,7 @@ export function openItemBrowser({ serverId, onPick, onManual } = {}) {
     btn.type = 'button';
     btn.className = 'flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-inset';
     btn.innerHTML = `
-      <span class="flex size-8 shrink-0 items-center justify-center rounded bg-inset p-1" data-ib-icon>${FALLBACK_ICON}</span>
+      <span class="flex size-8 shrink-0 items-center justify-center rounded bg-inset p-1 text-ink-faint" data-ib-icon>${glyphFor(item.id)}</span>
       <span class="min-w-0 flex-1">
         <span class="block truncate font-semibold">${esc(item.name)}</span>
         <span class="block truncate font-mono text-[11px] text-ink-faint">${esc(item.id)}</span>
@@ -102,7 +97,7 @@ export function openItemBrowser({ serverId, onPick, onManual } = {}) {
       img.loading = 'lazy';
       img.src = `${state.iconBase}/${item.id.slice('minecraft:'.length)}.png`;
       img.addEventListener('error', () => {
-        iconSlot.innerHTML = FALLBACK_ICON;
+        iconSlot.innerHTML = glyphFor(item.id);
       });
       iconSlot.replaceChildren(img);
     }

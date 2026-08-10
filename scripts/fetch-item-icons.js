@@ -15,15 +15,22 @@
 // instead of nothing; a genuine miss just means no local icon — the item
 // browser/inventory grid already show a generic glyph for that case.
 //
-// Usage: node scripts/fetch-item-icons.js [mcVersion]   (default: 1.21.8)
+// Usage: node scripts/fetch-item-icons.js [mcVersion]   (default: 1.21.11)
+//
+// Both sources are fetched from GitHub's `master` branch via jsdelivr's `gh`
+// CDN mode, NOT the published npm packages — minecraft-assets' latest npm
+// release (1.17.0) predates a lot of current content (e.g. the copper tool
+// line, wall shelves), so pinning to it silently missed textures that
+// actually exist in the repo. `master` is a moving target, but this is a
+// manually re-run maintenance script, not runtime code, so always fetching
+// current data on refresh is exactly what's wanted.
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const MCDATA_BASE = 'https://cdn.jsdelivr.net/gh/PrismarineJS/minecraft-data@master/data/pc';
-const ASSETS_PKG_VERSION = '1.17.0';
-const ASSETS_BASE = `https://cdn.jsdelivr.net/npm/minecraft-assets@${ASSETS_PKG_VERSION}/minecraft-assets/data`;
-const VERSION = process.argv[2] || '1.21.8';
+const ASSETS_BASE = 'https://cdn.jsdelivr.net/gh/PrismarineJS/minecraft-assets@master/data';
+const VERSION = process.argv[2] || '1.21.11';
 const OUT_DIR = path.join(__dirname, '..', 'public', 'icons', 'mc-items');
 const CONCURRENCY = 24;
 
