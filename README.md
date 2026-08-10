@@ -190,13 +190,21 @@ How it works — and what to know:
   login accordingly and never expose the UI raw to the internet.
 - Docker Desktop (Windows/macOS) is not a target for this mode — run the panel natively there;
   containerized deployment is aimed at Linux hosts (Portainer, Dockge, plain compose).
-- Features that reach a **sibling** container's host-published port — currently just the live
-  map (BlueMap) — go through `host.docker.internal`, not `127.0.0.1` (the panel's own loopback,
-  not the host's). The bundled `docker-compose.yml` maps this via `extra_hosts:
-host.docker.internal:host-gateway` (Docker Engine 20.10+); a raw `docker run` or a stack tool
-  that doesn't read `extra_hosts` from the compose file needs the equivalent
-  `--add-host=host.docker.internal:host-gateway` flag, or set `MAP_PROXY_HOST` yourself. Skipping
-  this makes the Map tab loop on "isn't up yet" even though BlueMap is genuinely running.
+- Features that reach a **sibling** container directly — currently just the live map (BlueMap) —
+  try, in order: every Docker-network IP the sibling container has (its own container port, no
+  host-port involved), then the sibling's HOST-published port via `host.docker.internal` (not
+  `127.0.0.1` — that's the panel's own loopback, not the host's). Whichever answers first is
+  cached. The bundled `docker-compose.yml` maps `host.docker.internal` via `extra_hosts:
+host.docker.internal:host-gateway` (Docker Engine 20.10+) for the fallback path; a raw
+  `docker run` or a stack tool that doesn't read `extra_hosts` from the compose file needs the
+  equivalent `--add-host=host.docker.internal:host-gateway` flag, or set `MAP_PROXY_HOST`
+  yourself.
+- **Reverse-proxy setups (Pangolin, NGINX, Traefik…) where a server's Docker network is set**
+  (Advanced Docker Settings) for the reverse proxy to reach it directly: put the **panel**
+  container on that same network too (add a `networks:` block to the panel service in
+  `docker-compose.yml`, referencing it as `external: true`) so the direct container-IP path above
+  actually has a route — without that, the panel falls back to the host-published-port path,
+  which may not be reachable at all in a network topology built around bypassing host ports.
 
 ### Configuration (`.env`, all optional)
 

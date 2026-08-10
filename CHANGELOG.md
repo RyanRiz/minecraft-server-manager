@@ -5,6 +5,33 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each push is cut as a new release with
 its own dated entry.
 
+## [0.9.2] - 2026-08-10
+
+Fixes the live map (BlueMap) never coming up through the panel's proxy for containerized-panel
+deployments, especially reverse-proxy setups (Pangolin, NGINX, Traefik…) where a server's Docker
+network is set so the proxy reaches it directly.
+
+### Fixed
+
+- **Live map proxy couldn't reach a sibling container in several common topologies** —
+  `src/web/routes/mapProxy.js` previously always dialed `127.0.0.1:<hostPort>`, which is only
+  correct on bare metal. It now tries, per server: every Docker-network IP the sibling container
+  has (its own container port, no host-port involved — this is what actually works when a
+  server's network is set in Advanced Docker Settings for a reverse proxy to reach it directly),
+  then the host-published-port path via `host.docker.internal` (containerized panel) or
+  `127.0.0.1` (bare metal). Whichever answers is cached per server (re-probed if it later stops
+  responding) so the extra connectivity check doesn't slow down every tile/asset request.
+  `docker-compose.yml` adds the `extra_hosts: host.docker.internal:host-gateway` mapping the
+  fallback path needs on Linux, plus a commented example for joining the panel to a shared
+  reverse-proxy network so the direct-container-IP path has a route. New `MAP_PROXY_HOST` env var
+  overrides the auto-detected host outright.
+- **Live-map readiness probe used `HEAD`** (`public/js/pages/map.js`) — switched to `GET`, since
+  BlueMap's bundled webserver isn't guaranteed to implement `HEAD`; a probe that never succeeds
+  looked identical to "BlueMap just isn't up yet" and retried forever.
+- The map proxy's error response now distinguishes "the map-proxy host name itself didn't
+  resolve" (almost always a missing `extra_hosts` entry) from "BlueMap isn't responding yet",
+  instead of one generic message for both.
+
 ## [0.9.1] - 2026-08-09
 
 Full control over the generated Docker container — name, network, ports, volumes — without ever
