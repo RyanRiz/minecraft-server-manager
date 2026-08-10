@@ -9,6 +9,7 @@ const { Cron } = require('croner');
 const { nanoid } = require('nanoid');
 const db = require('../db');
 const { recordEvent } = require('../events');
+const { getTimezone } = require('./settings');
 
 const jobs = new Map(); // schedule id -> Cron
 
@@ -81,7 +82,10 @@ function schedule(job) {
   try {
     // protect: true — a still-running invocation blocks the next firing
     // instead of overlapping it (e.g. hour-long backups on a 5-min cron).
-    const cron = new Cron(job.cron, { catch: true, protect: true }, async () => {
+    // timezone: without it croner evaluates the expression in the SYSTEM
+    // timezone (UTC in most containers), not the operator's configured one —
+    // "0 3 * * *" would then fire at 3am UTC, not 3am in Settings.
+    const cron = new Cron(job.cron, { catch: true, protect: true, timezone: getTimezone() }, async () => {
       db.run("UPDATE schedules SET last_run_at = datetime('now') WHERE id = ?", job.id);
       recordEvent({
         serverId: job.server_id || null,
@@ -114,6 +118,13 @@ function stopJob(id) {
   }
 }
 
+/** Re-arm every schedule against the CURRENT timezone — call after it changes
+ *  in Settings, or already-running jobs keep firing on the old one until the
+ *  panel restarts. */
+function rearmAll() {
+  for (const job of db.all('SELECT * FROM schedules')) schedule(job);
+}
+
 function startScheduler() {
   seedGlobalDefaults();
   for (const job of db.all('SELECT * FROM schedules')) schedule(job);
@@ -143,7 +154,7 @@ function seedGlobalDefaults() {
 
 function createSchedule({ serverId = null, taskType, cron, payload = {}, enabled = true }, { actor = 'system' } = {}) {
   if (!TASK_TYPES[taskType]) throw httpError(400, `Unknown task type ${taskType}`);
-  new Cron(cron); // validates; throws on bad expression
+  new Cron(cron, { timezone: getTimezone() }); // validates; throws on bad expression
   const id = `sch_${nanoid(8)}`;
   db.run(
     'INSERT INTO schedules (id, server_id, task_type, cron, payload_json, enabled) VALUES (?, ?, ?, ?, ?, ?)',
@@ -195,7 +206,7 @@ function listSchedules() {
     let next = null;
     let nextMs = null;
     try {
-      const nextRun = new Cron(s.cron).nextRun();
+      const nextRun = new Cron(s.cron, { timezone: getTimezone() }).nextRun();
       if (nextRun) {
         next = nextRun.toISOString().replace('T', ' ').slice(0, 16);
         nextMs = nextRun.getTime();
@@ -223,4 +234,4 @@ function listSchedules() {
   });
 }
 
-module.exports = { startScheduler, createSchedule, setEnabled, deleteSchedule, listSchedules, TASK_TYPES };
+module.exports = { startScheduler, createSchedule, setEnabled, deleteSchedule, listSchedules, rearmAll, TASK_TYPES };

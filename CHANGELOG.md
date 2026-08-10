@@ -5,6 +5,25 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each push is cut as a new release with
 its own dated entry.
 
+## [0.9.3] - 2026-08-10
+
+Scheduled tasks (restart / backup / RCON commands / global maintenance) fire at the right
+real-world time again.
+
+### Fixed
+
+- **Schedules ignored the configured panel timezone** — `src/services/scheduler.js` created every
+  croner job without a `timezone` option, so `"0 3 * * *"` fired at 3am in the SYSTEM's timezone
+  (UTC in almost every container) rather than 3am in whatever zone Settings → Localization has
+  configured. A scheduled RCON command, restart, or backup could run hours off from what the
+  cron expression visually says. All four `new Cron(...)` call sites (job creation, validation,
+  the `next run` computation in `listSchedules`, and the `/api/schedules/preview` endpoint used
+  by the New Schedule modal's live preview) now pass `{ timezone: settings.getTimezone() }`.
+- Changing the timezone in Settings now re-arms every already-created schedule immediately
+  (new `scheduler.rearmAll()`, called from `POST /api/settings/localization`) — previously an
+  existing schedule kept running on whichever zone was in effect when it was created until the
+  panel restarted.
+
 ## [0.9.2] - 2026-08-10
 
 Fixes the live map (BlueMap) never coming up through the panel's proxy for containerized-panel

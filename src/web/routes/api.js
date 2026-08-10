@@ -357,7 +357,12 @@ router.post(
         country: z.string().max(8).optional(),
       })
       .parse(req.body);
-    if (timezone !== undefined) settingsService.setTimezone(timezone);
+    if (timezone !== undefined) {
+      settingsService.setTimezone(timezone);
+      // Already-armed schedules keep firing on whatever zone they were
+      // created with until re-armed — do it now, not just for new ones.
+      require('../../services/scheduler').rearmAll();
+    }
     if (country !== undefined) settingsService.setCountry(country);
     res.json({ ok: true, localization: settingsService.localization() });
   })
@@ -770,7 +775,7 @@ router.get('/schedules/preview', (req, res) => {
   try {
     if (!expr) throw new Error('Empty expression');
     const { Cron } = require('croner');
-    const runs = new Cron(expr).nextRuns(3).map((d) => d.toISOString());
+    const runs = new Cron(expr, { timezone: settingsService.getTimezone() }).nextRuns(3).map((d) => d.toISOString());
     res.json({ ok: true, cron: expr, runs });
   } catch (err) {
     res.status(400).json({ ok: false, error: `Invalid cron expression: ${err.message}` });
