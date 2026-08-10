@@ -22,7 +22,10 @@ const DIMENSIONS = new Set(['minecraft:overworld', 'minecraft:the_nether', 'mine
 
 function assertName(name) {
   if (!PLAYER_NAME_RE.test(String(name)))
-    throw httpError(400, 'Invalid player name (letters, digits and _ only, max 16 chars — a leading . or * for Bedrock players is fine)');
+    throw httpError(
+      400,
+      'Invalid player name (letters, digits and _ only, max 16 chars — a leading . or * for Bedrock players is fine)'
+    );
   return String(name);
 }
 

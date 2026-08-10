@@ -17,10 +17,7 @@ test('parseLang keeps exact item/block keys, skips sub-entries and non-strings',
     })
   );
   const out = parseLang(buf);
-  assert.deepEqual(
-    out.map((e) => e.id).sort(),
-    ['minecraft:diamond_sword', 'minecraft:stone']
-  );
+  assert.deepEqual(out.map((e) => e.id).sort(), ['minecraft:diamond_sword', 'minecraft:stone']);
   assert.equal(out.find((e) => e.id === 'minecraft:diamond_sword').kind, 'item');
   assert.equal(out.find((e) => e.id === 'minecraft:stone').kind, 'block');
 });
