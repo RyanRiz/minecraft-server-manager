@@ -238,6 +238,13 @@ router.get(
     if (!SERVER_TABS.includes(tab)) return next();
 
     const server = await serverVM(row);
+    // Docker settings (container name, network, extra ports/binds — including
+    // host filesystem paths) are added ONLY here, never in serverVM, since
+    // that view model is shared with the public /status/:slug page.
+    server.containerName = row.containerName;
+    server.networkName = row.networkName;
+    server.extraPorts = row.extraPorts;
+    server.extraBinds = row.extraBinds;
     const context = {
       title: server.name,
       active: 'servers',

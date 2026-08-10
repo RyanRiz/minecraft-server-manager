@@ -15,6 +15,7 @@ const { z } = require('zod');
 const { nanoid } = require('nanoid');
 const blueprints = require('../../blueprints');
 const { dataPath } = require('../../storage/pathGuard');
+const { dockerOverridesSchema } = require('./dockerOverridesSchema');
 
 const router = express.Router();
 
@@ -43,6 +44,7 @@ const overridesSchema = z.object({
   containerMemoryMb: z.coerce.number().int().min(1024).max(524288).optional(),
   cpus: z.coerce.number().min(0).max(128).optional(),
   diskQuotaGb: z.coerce.number().min(0).max(16384).optional(),
+  ...dockerOverridesSchema,
 });
 
 router.get(

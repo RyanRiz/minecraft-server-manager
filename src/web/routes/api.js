@@ -21,6 +21,9 @@ const { dataPath } = require('../../storage/pathGuard');
 const { checkDocker } = require('../../docker/connect');
 const { fetchLogs } = require('../../docker/logs');
 const { statsOnce } = require('../../docker/stats');
+const dockerNetworks = require('../../docker/networks');
+const dockerSpec = require('../../services/dockerSpec');
+const { dockerOverridesSchema } = require('./dockerOverridesSchema');
 
 const router = express.Router();
 
@@ -72,6 +75,7 @@ const createSchema = z
     updatePolicy: z.enum(['manual', 'notify', 'auto']).optional(),
     autoStart: z.coerce.boolean().optional(),
     start: z.coerce.boolean().optional(),
+    ...dockerOverridesSchema,
   })
   .refine((v) => !v.containerMemoryMb || !v.heapMb || v.containerMemoryMb > v.heapMb, {
     message: 'Container memory limit must be higher than the Java heap (or the JVM will be OOM-killed)',
@@ -121,13 +125,81 @@ router.patch(
         autoStart: z.coerce.boolean().optional(),
         autoRestart: z.coerce.boolean().optional(),
         env: z.record(z.string(), z.string()).optional(),
+        ...dockerOverridesSchema,
       })
       .refine((v) => !v.containerMemoryMb || !v.heapMb || v.containerMemoryMb > v.heapMb, {
         message: 'Container memory limit must be higher than the Java heap',
       })
       .parse(req.body);
+    if (
+      changes.containerName !== undefined ||
+      changes.networkName !== undefined ||
+      changes.extraPorts !== undefined ||
+      changes.extraBinds !== undefined
+    ) {
+      const before = requireServer(req.params.id);
+      await dockerSpec.validateOverrides(
+        {
+          containerName: changes.containerName || null,
+          networkName: changes.networkName || null,
+          extraPorts: changes.extraPorts ?? before.extraPorts,
+          extraBinds: changes.extraBinds ?? before.extraBinds,
+        },
+        { previousExtraPorts: before.extraPorts }
+      );
+    }
     const { server, needsRecreate } = servers.updateServer(req.params.id, changes, { actor: req.user.username });
     res.json({ ok: true, needsRecreate, server: publicServer(server) });
+  })
+);
+
+// Advanced Docker settings: host network discovery, and the "Preview as YAML"
+// round trip shared by the wizard (pre-creation) and the Settings tab (post-creation).
+
+router.get(
+  '/docker/networks',
+  asyncHandler(async (req, res) => {
+    res.json({ ok: true, networks: await dockerNetworks.listNetworks() });
+  })
+);
+
+const previewSchema = z.object({
+  type: z.string().trim().max(32).optional(),
+  mcVersion: z.string().trim().max(32).optional(),
+  javaTag: z.string().max(16).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  heapMb: z.coerce.number().int().min(512).max(262144).optional(),
+  containerMemoryMb: z.coerce.number().int().min(1024).max(524288).optional(),
+  containerSwapMb: z.coerce.number().int().min(0).optional(),
+  cpus: z.coerce.number().min(0).max(128).optional(),
+  portGame: z.coerce.number().int().min(1024).max(65535).optional(),
+  portRcon: z.coerce.number().int().min(1024).max(65535).optional(),
+  portBedrock: z.coerce.number().int().min(1024).max(65535).optional(),
+  withBedrock: z.coerce.boolean().optional(),
+  ...dockerOverridesSchema,
+});
+
+router.post(
+  '/docker/preview',
+  asyncHandler((req, res) => {
+    const input = previewSchema.parse(req.body);
+    res.json({ ok: true, yaml: dockerSpec.toYaml(servers.previewCreateSpec(input)) });
+  })
+);
+
+router.post(
+  '/docker/preview/parse',
+  asyncHandler((req, res) => {
+    const { yaml: text } = z.object({ yaml: z.string().max(20000) }).parse(req.body);
+    res.json({ ok: true, spec: dockerSpec.fromYaml(text) });
+  })
+);
+
+router.get(
+  '/servers/:id/docker-spec',
+  asyncHandler((req, res) => {
+    requireServer(req.params.id);
+    res.json({ ok: true, yaml: dockerSpec.toYaml(servers.previewServerSpec(req.params.id)) });
   })
 );
 
@@ -601,6 +673,7 @@ const fromPackSchema = z
     diskQuotaGb: z.coerce.number().min(0).max(16384).optional(),
     portGame: z.coerce.number().int().min(1024).max(65535).optional(),
     env: z.record(z.string(), z.string()).optional(),
+    ...dockerOverridesSchema,
   })
   .refine((v) => !v.containerMemoryMb || !v.heapMb || v.containerMemoryMb > v.heapMb, {
     message: 'Container memory limit must be higher than the Java heap (or the JVM will be OOM-killed)',
@@ -632,6 +705,10 @@ router.post(
           containerMemoryMb: input.containerMemoryMb,
           diskQuotaGb: input.diskQuotaGb,
           portGame: input.portGame,
+          containerName: input.containerName,
+          networkName: input.networkName,
+          extraPorts: input.extraPorts,
+          extraBinds: input.extraBinds,
         },
         { actor, start: false, onProgress: (s) => t.step(s) }
       );
@@ -1417,6 +1494,7 @@ const fromModsSchema = z
     diskQuotaGb: z.coerce.number().min(0).max(16384).optional(),
     portGame: z.coerce.number().int().min(1024).max(65535).optional(),
     env: z.record(z.string(), z.string()).optional(),
+    ...dockerOverridesSchema,
   })
   .refine((v) => !v.containerMemoryMb || !v.heapMb || v.containerMemoryMb > v.heapMb, {
     message: 'Container memory limit must be higher than the Java heap (or the JVM will be OOM-killed)',
@@ -1449,6 +1527,10 @@ router.post(
           containerMemoryMb: input.containerMemoryMb,
           diskQuotaGb: input.diskQuotaGb,
           portGame: input.portGame,
+          containerName: input.containerName,
+          networkName: input.networkName,
+          extraPorts: input.extraPorts,
+          extraBinds: input.extraBinds,
         },
         { actor, start: false, onProgress: (s) => t.step(s) }
       );

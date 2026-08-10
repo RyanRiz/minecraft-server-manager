@@ -288,6 +288,50 @@
         <p class="help">Raw escape hatch for anything new the image adds before the catalog catches up. One KEY=value per line; these override everything above.</p>
       </div>
     </details>
+    <details class="card group">
+      <summary class="flex cursor-pointer items-center gap-2.5 p-4 font-semibold marker:content-none">
+        {{{icon 'container' 'size-4 text-ink-faint'}}} Advanced Docker settings
+        <span class="ml-auto text-ink-faint transition group-open:rotate-180">{{{icon 'chevron-down' 'size-4'}}}</span>
+      </summary>
+      <div class="space-y-4 border-t border-line p-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="label" for="wz-docker-name">Container name <span class="text-xs font-normal text-ink-faint">(optional)</span></label>
+            <input class="input font-mono" id="wz-docker-name" placeholder="msm-<auto>" autocomplete="off">
+            <p class="help">Letters, digits, "_", ".", "-". Leave blank for the default.</p>
+          </div>
+          <div>
+            <label class="label" for="wz-docker-network">Docker network <span class="text-xs font-normal text-ink-faint">(optional)</span></label>
+            <select class="input" id="wz-docker-network" data-label="Docker network">
+              <option value="">Default (bridge)</option>
+            </select>
+            <p class="help">Attach to an existing network — handy for a reverse proxy like Pangolin or NGINX.</p>
+          </div>
+        </div>
+
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <span class="text-sm font-semibold">Extra port mappings</span>
+            <button type="button" class="btn btn-sm" id="wz-docker-port-add">{{{icon 'plus' 'size-3.5'}}} Add port</button>
+          </div>
+          <div class="space-y-2" id="wz-docker-ports"></div>
+          <p class="help">e.g. UDP 19132 for Bedrock/Geyser, TCP 8100 for BlueMap.</p>
+        </div>
+
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <span class="text-sm font-semibold">Extra volume binds</span>
+            <button type="button" class="btn btn-sm" id="wz-docker-bind-add">{{{icon 'plus' 'size-3.5'}}} Add bind</button>
+          </div>
+          <div class="space-y-2" id="wz-docker-binds"></div>
+          <p class="help">Free-form host paths — the panel already has Docker-socket (root-equivalent) access, so double-check these before creating.</p>
+        </div>
+
+        <div class="flex justify-end">
+          <button type="button" class="btn" id="wz-docker-preview">{{{icon 'file-code' 'size-4'}}} Preview as YAML</button>
+        </div>
+      </div>
+    </details>
   </div>
 
   <div class="mt-6 flex items-center justify-between">

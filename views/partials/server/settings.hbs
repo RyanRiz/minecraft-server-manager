@@ -1,4 +1,4 @@
-<div class="grid gap-4 lg:grid-cols-2" data-settings-server="{{server.id}}" data-settings-icon="{{server.icon}}" data-settings-accent="{{server.accent}}" data-settings-tags="{{json server.tags}}" data-settings-env="{{settingsEnv}}">
+<div class="grid gap-4 lg:grid-cols-2" data-settings-server="{{server.id}}" data-settings-icon="{{server.icon}}" data-settings-accent="{{server.accent}}" data-settings-tags="{{json server.tags}}" data-settings-env="{{settingsEnv}}" data-settings-docker-name="{{server.containerName}}" data-settings-docker-network="{{server.networkName}}" data-settings-docker-ports="{{json server.extraPorts}}" data-settings-docker-binds="{{json server.extraBinds}}">
   <div class="card p-4">
     <h3 class="mb-4 font-semibold">Identity</h3>
     <div class="space-y-4">
@@ -123,6 +123,47 @@
         <label class="flex items-center gap-2.5"><input type="radio" name="up" value="manual" class="msm-radio" {{#if (eq server.updatePolicy 'manual')}}checked{{/if}}> Manual only <span class="text-xs text-ink-faint">— never touch my versions</span></label>
         <label class="flex items-center gap-2.5"><input type="radio" name="up" value="notify" class="msm-radio" {{#if (eq server.updatePolicy 'notify')}}checked{{/if}}> Notify me <span class="text-xs text-ink-faint">— badge when updates exist</span></label>
         <label class="flex items-center gap-2.5"><input type="radio" name="up" value="auto" class="msm-radio" {{#if (eq server.updatePolicy 'auto')}}checked{{/if}}> Auto-update <span class="text-xs text-ink-faint">— with automatic pre-update backup</span></label>
+      </div>
+    </div>
+
+    <div class="card p-4">
+      <h3 class="mb-4 font-semibold">Docker settings</h3>
+      <div class="space-y-4">
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="label" for="st-docker-name">Container name</label>
+            <input class="input font-mono" id="st-docker-name" value="{{server.containerName}}" placeholder="msm-{{server.id}}" autocomplete="off">
+          </div>
+          <div>
+            <label class="label" for="st-docker-network">Docker network</label>
+            <select class="input" id="st-docker-network" data-label="Docker network">
+              <option value="">Default (bridge)</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <span class="text-sm font-semibold">Extra port mappings</span>
+            <button type="button" class="btn btn-sm" id="st-docker-port-add">{{{icon 'plus' 'size-3.5'}}} Add port</button>
+          </div>
+          <div class="space-y-2" id="st-docker-ports"></div>
+          <p class="help">e.g. UDP 19132 for Bedrock/Geyser, TCP 8100 for BlueMap.</p>
+        </div>
+
+        <div>
+          <div class="mb-2 flex items-center justify-between">
+            <span class="text-sm font-semibold">Extra volume binds</span>
+            <button type="button" class="btn btn-sm" id="st-docker-bind-add">{{{icon 'plus' 'size-3.5'}}} Add bind</button>
+          </div>
+          <div class="space-y-2" id="st-docker-binds"></div>
+          <p class="help">Free-form host paths — the panel already has Docker-socket (root-equivalent) access.</p>
+        </div>
+
+        <div class="flex items-center justify-between gap-3">
+          <p class="help mt-0">Requires a Recreate to apply.</p>
+          <button type="button" class="btn shrink-0" id="st-docker-preview">{{{icon 'file-code' 'size-4'}}} Preview as YAML</button>
+        </div>
       </div>
     </div>
 

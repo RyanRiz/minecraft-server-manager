@@ -7,6 +7,7 @@
 const path = require('node:path');
 const { getDocker } = require('./connect');
 const { toHostPath } = require('./hostPath');
+const db = require('../db');
 
 const LABEL = 'msm.id';
 const GAME_PORT = '25565';
@@ -26,6 +27,9 @@ function containerName(serverId) {
  * @param {string} spec.dataDir          absolute panel-local data dir, re-rooted to the host and bind-mounted to /data
  * @param {object} spec.ports            { game, rcon, bedrock? } host ports
  * @param {object} spec.resources        { memoryMb, swapMb, cpus }
+ * @param {string} [spec.containerName]  Docker container name override; default `msm-<serverId>`
+ * @param {string} [spec.networkName]    existing host Docker network to attach to; default bridge
+ * @param {Array}  [spec.extraBinds]     [{hostPath, containerPath, mode: 'rw'|'ro'}] — RAW host paths, not re-rooted
  */
 async function createContainer(spec) {
   const docker = getDocker();
@@ -43,7 +47,7 @@ async function createContainer(spec) {
     exposed[`${BEDROCK_PORT}/udp`] = {};
     bindings[`${BEDROCK_PORT}/udp`] = [{ HostPort: String(spec.ports.bedrock) }];
   }
-  // Feature ports (e.g. BlueMap's web server) — [{container: '8100/tcp', host: 8123}]
+  // Feature ports (e.g. BlueMap's web server) + user-defined extras — [{container: '8100/tcp', host: 8123}]
   for (const extra of spec.extraPorts || []) {
     exposed[extra.container] = {};
     bindings[extra.container] = [{ HostPort: String(extra.host) }];
@@ -52,28 +56,45 @@ async function createContainer(spec) {
   const memoryBytes = Math.round(spec.resources.memoryMb * 1024 * 1024);
   const swapBytes = memoryBytes + Math.round((spec.resources.swapMb || 0) * 1024 * 1024);
 
+  // Extra binds are already HOST paths (the admin types the real host
+  // location), unlike dataDir which is panel-local and must be re-rooted —
+  // running them through toHostPath would reject anything outside DATA_DIR,
+  // which is the entire point of this escape hatch.
+  const extraBindStrings = (spec.extraBinds || []).map(
+    (b) => `${b.hostPath}:${b.containerPath}${b.mode === 'ro' ? ':ro' : ''}`
+  );
+
+  const hostConfig = {
+    Binds: [`${toHostPath(spec.dataDir)}:/data`, ...extraBindStrings],
+    PortBindings: bindings,
+    Memory: memoryBytes,
+    MemorySwap: swapBytes,
+    NanoCpus: spec.resources.cpus ? Math.round(spec.resources.cpus * 1e9) : 0,
+    RestartPolicy: { Name: 'no' }, // the panel owns restarts (crash backoff, quota stops)
+  };
+  if (spec.networkName) hostConfig.NetworkMode = spec.networkName;
+
   const container = await docker.createContainer({
-    name: containerName(spec.serverId),
+    name: spec.containerName || containerName(spec.serverId),
     Image: spec.image,
     Env: Object.entries(spec.env).map(([k, v]) => `${k}=${v}`),
     Labels: { [LABEL]: spec.serverId, 'msm.managed': 'true' },
     ExposedPorts: exposed,
     Tty: false,
     OpenStdin: false,
-    HostConfig: {
-      Binds: [`${toHostPath(spec.dataDir)}:/data`],
-      PortBindings: bindings,
-      Memory: memoryBytes,
-      MemorySwap: swapBytes,
-      NanoCpus: spec.resources.cpus ? Math.round(spec.resources.cpus * 1e9) : 0,
-      RestartPolicy: { Name: 'no' }, // the panel owns restarts (crash backoff, quota stops)
-    },
+    HostConfig: hostConfig,
   });
   return container.id;
 }
 
+/** Resolve the actual Docker name for a server — its custom name if one was set, else msm-<id>. */
+function resolvedName(serverId) {
+  const row = db.get('SELECT container_name FROM servers WHERE id = ?', serverId);
+  return (row && row.container_name) || containerName(serverId);
+}
+
 function getContainer(serverId) {
-  return getDocker().getContainer(containerName(serverId));
+  return getDocker().getContainer(resolvedName(serverId));
 }
 
 /** Inspect → panel status. Returns { status, health, exitCode, startedAt, pid }. */
