@@ -162,25 +162,17 @@ function init(root) {
         ${item.count > 1 ? `<span class="absolute bottom-0 right-0.5 text-[9px] font-bold">${esc(item.count)}</span>` : ''}
         ${enchanted ? '<span class="absolute left-0.5 top-0 text-[9px]">*</span>' : ''}
         ${hasNested ? '<span class="absolute left-0.5 bottom-0.5 size-1.5 rounded-full bg-grass-400" aria-hidden="true"></span>' : ''}`;
-      // minecraft-assets only has vanilla textures — modded items (and the rare
+      // The bundled icon set only covers vanilla — modded items (and the rare
       // vanilla id it's missing) just keep the text abbreviation as-is.
       if (iconBase && item.id.startsWith('minecraft:')) {
-        const path = item.id.slice('minecraft:'.length);
         const abbrevEl = cell.querySelector('[data-slot-abbrev]');
         const img = document.createElement('img');
         img.className = 'pointer-events-none absolute inset-0.5 object-contain [image-rendering:pixelated]';
         img.alt = '';
         img.loading = 'lazy';
-        img.src = `${iconBase}/items/${path}.png`;
+        img.src = `${iconBase}/${item.id.slice('minecraft:'.length)}.png`;
         img.addEventListener('load', () => abbrevEl?.classList.add('hidden'));
-        img.addEventListener('error', () => {
-          if (img.dataset.triedBlock) {
-            img.remove(); // both misses — text abbreviation (never hidden) stands in
-            return;
-          }
-          img.dataset.triedBlock = '1';
-          img.src = `${iconBase}/blocks/${path}.png`;
-        });
+        img.addEventListener('error', () => img.remove()); // miss — text abbreviation (never hidden) stands in
         cell.appendChild(img);
       }
     }

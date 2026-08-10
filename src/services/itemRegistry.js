@@ -51,38 +51,14 @@ const JAR_CONCURRENCY = 8;
 const MCDATA_BASE = 'https://cdn.jsdelivr.net/gh/PrismarineJS/minecraft-data@master/data/pc';
 const MCDATA_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-// PrismarineJS/minecraft-assets (MIT) — extracted per-version item/block PNGs,
-// used to show an icon next to each row in the item browser. Pinned to a
-// specific release so the CDN can't silently change shape under us; bump
-// deliberately (and extend ASSET_BUCKETS) when a new MC version needs textures.
-const ASSET_PKG_VERSION = '1.17.0';
-const ASSET_CDN_BASE = `https://cdn.jsdelivr.net/npm/minecraft-assets@${ASSET_PKG_VERSION}/minecraft-assets/data`;
-// Newest-first. Textures are bucketed by "when the art actually changed", not
-// every patch release, so a requested version maps to the closest bucket at
-// or before it.
-const ASSET_BUCKETS = [
-  '1.21.8',
-  '1.21.7',
-  '1.21.6',
-  '1.21.5',
-  '1.21.4',
-  '1.21.1',
-  '1.20.2',
-  '1.19.1',
-  '1.18.1',
-  '1.17.1',
-  '1.16.4',
-  '1.16.1',
-  '1.15.2',
-  '1.14.4',
-  '1.13.2',
-  '1.13',
-  '1.12',
-  '1.11.2',
-  '1.10',
-  '1.9',
-  '1.8.8',
-];
+// Item/block icons: served locally from public/icons/mc-items/ (one flat PNG
+// per vanilla item id, no "minecraft:" prefix) instead of an external CDN —
+// see scripts/fetch-item-icons.js for how that set is built/refreshed. A
+// self-hosted panel commonly sits behind a reverse proxy or restrictive
+// firewall that a client-side <img> to a third-party CDN may never reach;
+// bundling avoids that dependency entirely. Mod items have no bundled icon
+// (the source data is vanilla-only) — callers should skip icons for those.
+const ICON_BASE = '/icons/mc-items';
 
 const memory = new Map(); // serverId -> { fingerprint, registry }
 
@@ -425,25 +401,11 @@ async function fetchVanillaFallback(mcVersion) {
 }
 
 // ---------------------------------------------------------------------------
-// item icons (PrismarineJS/minecraft-assets, vanilla only — mod items never
-// have a texture here, callers should skip icons entirely for those)
+// item icons — local, bundled (see ICON_BASE above)
 
-function resolveAssetBucket(mcVersion) {
-  const m = /^(\d+)\.(\d+)(?:\.(\d+))?/.exec(String(mcVersion || ''));
-  if (!m) return ASSET_BUCKETS[0];
-  const req = [Number(m[1]), Number(m[2]), Number(m[3] || 0)];
-  const cmp = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
-  for (const bucket of ASSET_BUCKETS) {
-    const bm = /^(\d+)\.(\d+)(?:\.(\d+))?/.exec(bucket);
-    const bv = [Number(bm[1]), Number(bm[2]), Number(bm[3] || 0)];
-    if (cmp(bv, req) <= 0) return bucket;
-  }
-  return ASSET_BUCKETS[ASSET_BUCKETS.length - 1];
-}
-
-/** Base URL to build `${iconBase}/items/<path>.png` / `${iconBase}/blocks/<path>.png` from. */
-function iconBaseUrl(mcVersion) {
-  return `${ASSET_CDN_BASE}/${resolveAssetBucket(mcVersion)}`;
+/** Base URL to build `${iconBase}/<path>.png` from (vanilla items only). */
+function iconBaseUrl() {
+  return ICON_BASE;
 }
 
 // ---------------------------------------------------------------------------
@@ -715,7 +677,6 @@ module.exports = {
   parseLang,
   parseModsToml,
   computeFingerprint,
-  resolveAssetBucket,
   fetchVanillaFallback,
   nearestVersion,
 };

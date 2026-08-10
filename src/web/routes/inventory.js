@@ -126,7 +126,7 @@ router.get(
       ok: true,
       running,
       player,
-      iconBase: itemRegistry.iconBaseUrl(server.mc_version),
+      iconBase: itemRegistry.iconBaseUrl(),
       edit: {
         online: ctx.online,
         mechanism: ctx.mechanism, // 'rcon' (live commands) | 'file' (.dat rewrite + backup)

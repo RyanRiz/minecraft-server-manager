@@ -92,26 +92,19 @@ export function openItemBrowser({ serverId, onPick, onManual } = {}) {
       modal.close();
       if (onPick) onPick({ id: item.id, name: item.name, mod: item.mod, kind: item.kind });
     });
-    // minecraft-assets only has vanilla textures — mod items keep the fallback
-    // glyph rather than spending a request on a 404 we already know is coming.
+    // The bundled icon set only covers vanilla — mod items keep the fallback
+    // glyph rather than requesting a local file we already know isn't there.
     if (state.iconBase && item.id.startsWith('minecraft:')) {
       const iconSlot = btn.querySelector('[data-ib-icon]');
-      const path = item.id.slice('minecraft:'.length);
       const img = document.createElement('img');
       img.className = 'size-full object-contain [image-rendering:pixelated]';
       img.alt = '';
       img.loading = 'lazy';
-      img.src = `${state.iconBase}/items/${path}.png`;
+      img.src = `${state.iconBase}/${item.id.slice('minecraft:'.length)}.png`;
       img.addEventListener('error', () => {
-        if (img.dataset.triedBlock) {
-          iconSlot.innerHTML = FALLBACK_ICON; // both misses
-          return;
-        }
-        img.dataset.triedBlock = '1';
-        img.src = `${state.iconBase}/blocks/${path}.png`;
+        iconSlot.innerHTML = FALLBACK_ICON;
       });
-      iconSlot.innerHTML = '';
-      iconSlot.appendChild(img);
+      iconSlot.replaceChildren(img);
     }
     return btn;
   }
