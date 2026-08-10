@@ -5,6 +5,27 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each push is cut as a new release with
 its own dated entry.
 
+## [0.9.4] - 2026-08-10
+
+Fixes the live map (BlueMap) failing entirely on any server whose world isn't literally named
+"world".
+
+### Fixed
+
+- **BlueMap couldn't find a custom-named world** — enabling the live map never told BlueMap what
+  the server's actual world folder is. BlueMap only auto-generates its per-dimension map configs
+  (`maps/world.conf`, `world_nether.conf`, `world_the_end.conf`) once, on first launch, guessing
+  the folder is literally named `world`/`world_nether`/`world_the_end`. Any server using a custom
+  level name (`LEVEL` env, a renamed/switched world) got every generated map pointed at a folder
+  that doesn't exist — BlueMap logged "problem with your BlueMap setup" for each one and disabled
+  itself entirely ("no valid maps configured"), even though the world was completely fine.
+  `src/services/map.js` now writes (or, for a setup that already hit this, surgically patches —
+  every other line an admin or BlueMap itself set stays untouched) the correct `world:` path for
+  whichever world is actually active, both when the map is first enabled and whenever the active
+  world changes afterward (rename or switch, via a new hook in `services/worlds.js`'s
+  `setActiveLevel`). Nether/end configs are only written once those dimension folders actually
+  exist, so a fresh world with an unvisited Nether doesn't get a bogus entry either.
+
 ## [0.9.3] - 2026-08-10
 
 Scheduled tasks (restart / backup / RCON commands / global maintenance) fire at the right

@@ -847,6 +847,10 @@ function setActiveLevel(server, levelName, { actor }) {
   if (server.env && server.env.LEVEL !== undefined) {
     require('./servers').updateServer(server.id, { env: { ...server.env, LEVEL: levelName } }, { actor });
   }
+  // Keep BlueMap (if enabled) pointed at whichever world is actually active —
+  // otherwise a rename/switch after enabling the map silently breaks it again.
+  const mapService = require('./map');
+  if (mapService.getMapConfig(server.id).enabled) mapService.writeMapConfigs(server.id);
 }
 
 /** Existing dim dirs for a world: [main, main_nether?, main_the_end?] (absolute). */
