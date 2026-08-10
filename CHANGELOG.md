@@ -5,6 +5,50 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each push is cut as a new release with
 its own dated entry.
 
+## [0.9.1] - 2026-08-09
+
+Full control over the generated Docker container — name, network, ports, volumes — without ever
+leaving the panel or reaching for the CLI.
+
+### Added
+
+- **Advanced Docker Settings** — review and override the container the panel is about to create
+  (or has already created):
+  - **Custom container name**, overriding the fixed `msm-<id>` pattern (e.g. `msm-survival`
+    instead of a randomized-looking ID).
+  - **Docker network selection** — attach to an existing host network instead of the default
+    bridge, for reverse proxies like Pangolin or NGINX. New `src/docker/networks.js` lists the
+    host's networks via the Docker Engine API.
+  - **Extra port mappings** and **extra volume binds** beyond the built-in game/RCON/Bedrock
+    ports and single `/data` mount — e.g. UDP 19132 for Bedrock/Geyser, TCP 8100 for BlueMap, or
+    a host config directory mounted straight into the container. Volume binds accept any
+    absolute host path by design (the panel already holds Docker-socket, root-equivalent access);
+    only basic sanity checks (absolute path, no NUL bytes) apply.
+  - Opt-in, under the wizard's existing "Advanced options" toggle — one-click creation for casual
+    use is unchanged. Available across all four creation paths (vanilla/plugin wizard, from-pack,
+    from-mods, blueprint import) and, post-creation, from a new "Docker settings" card on the
+    server's Settings tab, applied via the existing Recreate flow.
+- **"Preview as YAML"** — an editable text preview of the generated container params
+  (new `src/services/dockerSpec.js`, using the new `js-yaml` dependency) that parses edits back
+  into the same structured fields on Apply. Re-validated server-side both on Apply and again on
+  the real create/update request — the textarea's contents are never trusted just because they
+  started from a server-generated preview.
+- Migration `007_docker_advanced.js` adds `container_name`, `network_name`, `extra_ports_json`
+  and `extra_binds_json` to `servers`; NULL/`[]` defaults keep every pre-existing server's
+  container byte-identical (default name, bridge network, single `/data` bind) with no backfill
+  needed.
+
+### Fixed
+
+- **GHCR image name is now lowercased before build** — the `Docker` workflow derives `IMAGE_NAME`
+  from `${GITHUB_REPOSITORY,,}` before `docker/build-push-action` runs. Docker/OCI tags must be
+  all-lowercase, so a mixed-case GitHub owner or repo name (e.g. `OwenWright8/...`) previously
+  failed the build outright.
+- **Port-collision check missed ports it should have known about** — `dbPortsInUse` (used to
+  suggest and validate ports) now unions in each server's extra port mappings and BlueMap's own
+  web-server port (tracked separately in the `integrations` table), closing a latent gap where a
+  freshly suggested port could silently collide with either.
+
 ## [0.9.0] - 2026-08-09
 
 Containerized deployment (closes [#1](https://github.com/anefzaoui/minecraft-server-manager/issues/1)):
