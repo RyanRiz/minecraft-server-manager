@@ -53,7 +53,7 @@ const MCDATA_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Item/block icons: served locally from public/icons/mc-items/ (one flat PNG
 // per vanilla item id, no "minecraft:" prefix) instead of an external CDN —
-// see scripts/fetch-item-icons.js for how that set is built/refreshed. A
+// see scripts/fetch-wiki-icons.js for how that set is built/refreshed. A
 // self-hosted panel commonly sits behind a reverse proxy or restrictive
 // firewall that a client-side <img> to a third-party CDN may never reach;
 // bundling avoids that dependency entirely. Mod items have no bundled icon

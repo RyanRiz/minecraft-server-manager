@@ -56,7 +56,7 @@ test('nearestVersion picks exact match, else the newest available at or below th
 test('iconBaseUrl points at the locally-bundled icon set, not an external CDN', () => {
   const base = iconBaseUrl();
   assert.equal(base, '/icons/mc-items');
-  // Sanity-check the bundle itself is actually present (see scripts/fetch-item-icons.js).
+  // Sanity-check the bundle itself is actually present (see scripts/fetch-wiki-icons.js).
   const dir = path.join(__dirname, '..', 'public', base);
   assert.ok(fs.existsSync(path.join(dir, 'diamond_sword.png')), 'bundled icon set is missing — run the fetch script');
 });

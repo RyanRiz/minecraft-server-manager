@@ -1,11 +1,10 @@
-// Purpose-built fallback glyphs for the handful of items that have NO static
-// texture anywhere — not in minecraft-assets, not even in Mojang's own client
-// jar. Beds/banners/chests/shulker-adjacent blocks are rendered as live 3D
-// models by the game itself, and clock/compass/shield are animated/overlay
-// items — there's no PNG to fetch for any of them (see
-// scripts/fetch-item-icons.js for the full rundown of what's fetchable and
-// what isn't). Bed/banner glyphs still pick up the item's actual dye color
-// from its id, which a generic box glyph can't convey.
+// Purpose-built fallback glyphs for the handful of items that get a bespoke
+// treatment instead of their bundled wiki icon. Beds/banners/chests/
+// shulker-adjacent blocks are rendered as live 3D models by the game itself,
+// and clock/compass are animated overlay items, so these use a hand-drawn
+// glyph instead (see scripts/fetch-wiki-icons.js for how the bundled icon
+// set is built/refreshed). Bed/banner glyphs still pick up the item's actual
+// dye color from its id, which a generic box glyph can't convey.
 //
 // Paths are lucide-static (ISC), already vetted/bundled in this project — see
 // src/web/icons.js for the server-side equivalent of this same icon set.
