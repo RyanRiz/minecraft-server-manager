@@ -24,6 +24,7 @@ function init(root) {
   let currentData = null;
   let editInfo = null; // {online, mechanism: 'rcon'|'file', nestedEditable}
   let selectedSnaps = []; // rel file paths, max 2
+  let iconBase = ''; // minecraft-assets CDN base for this server's MC version (vanilla only)
 
   const el = (id) => document.getElementById(id);
   const playerSel = el('inv-player');
@@ -157,10 +158,31 @@ function init(root) {
         [where, hasNested ? 'has contents' : '', editable ? 'click to edit' : ''].filter(Boolean).join(' · ')
       );
       cell.innerHTML = `
-        <span>${esc(abbrev(item.id))}</span>
+        <span data-slot-abbrev>${esc(abbrev(item.id))}</span>
         ${item.count > 1 ? `<span class="absolute bottom-0 right-0.5 text-[9px] font-bold">${esc(item.count)}</span>` : ''}
         ${enchanted ? '<span class="absolute left-0.5 top-0 text-[9px]">*</span>' : ''}
         ${hasNested ? '<span class="absolute left-0.5 bottom-0.5 size-1.5 rounded-full bg-grass-400" aria-hidden="true"></span>' : ''}`;
+      // minecraft-assets only has vanilla textures — modded items (and the rare
+      // vanilla id it's missing) just keep the text abbreviation as-is.
+      if (iconBase && item.id.startsWith('minecraft:')) {
+        const path = item.id.slice('minecraft:'.length);
+        const abbrevEl = cell.querySelector('[data-slot-abbrev]');
+        const img = document.createElement('img');
+        img.className = 'pointer-events-none absolute inset-0.5 object-contain [image-rendering:pixelated]';
+        img.alt = '';
+        img.loading = 'lazy';
+        img.src = `${iconBase}/items/${path}.png`;
+        img.addEventListener('load', () => abbrevEl?.classList.add('hidden'));
+        img.addEventListener('error', () => {
+          if (img.dataset.triedBlock) {
+            img.remove(); // both misses — text abbreviation (never hidden) stands in
+            return;
+          }
+          img.dataset.triedBlock = '1';
+          img.src = `${iconBase}/blocks/${path}.png`;
+        });
+        cell.appendChild(img);
+      }
     }
     if (onPick) cell.addEventListener('click', () => onPick(item || null));
     else if (at) cell.addEventListener('click', () => (item ? openSlotMenu(at, item) : openPlaceFlow(at)));
@@ -569,9 +591,10 @@ function init(root) {
   async function loadInventory(fresh = false) {
     if (!currentUuid) return;
     try {
-      const { player, edit } = await api(`/player/${currentUuid}${fresh ? '?fresh=1' : ''}`);
+      const { player, edit, iconBase: base } = await api(`/player/${currentUuid}${fresh ? '?fresh=1' : ''}`);
       currentData = player;
       editInfo = edit || null;
+      if (base) iconBase = base;
       renderInventory(player);
       el('inv-view').classList.remove('hidden');
     } catch (err) {

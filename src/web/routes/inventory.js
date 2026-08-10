@@ -14,6 +14,7 @@ const servers = require('../../services/servers');
 const inventory = require('../../services/inventory');
 const { inspectStatus } = require('../../docker/containers');
 const { PLAYER_NAME_RE } = require('../../utils/playerName');
+const itemRegistry = require('../../services/itemRegistry');
 
 const router = express.Router({ mergeParams: true });
 
@@ -125,6 +126,7 @@ router.get(
       ok: true,
       running,
       player,
+      iconBase: itemRegistry.iconBaseUrl(server.mc_version),
       edit: {
         online: ctx.online,
         mechanism: ctx.mechanism, // 'rcon' (live commands) | 'file' (.dat rewrite + backup)
