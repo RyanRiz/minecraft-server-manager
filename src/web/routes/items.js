@@ -53,6 +53,7 @@ router.get(
       items,
       total,
       mods: registry.mods,
+      iconBase: itemRegistry.iconBaseUrl(server.mc_version),
       registry: { count: registry.items.length, builtAt: registry.builtAt, buildMs: registry.buildMs },
     });
   })

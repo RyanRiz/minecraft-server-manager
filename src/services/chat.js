@@ -9,6 +9,7 @@ const { execCapture, inspectStatus } = require('../docker/containers');
 const { cleanText } = require('../utils/ansi');
 const { recordEvent } = require('../events');
 const httpError = require('../utils/httpError');
+const { PLAYER_NAME_RE } = require('../utils/playerName');
 
 // The 16 vanilla text colors → hex (also drives the UI swatches).
 const COLORS = {
@@ -43,7 +44,7 @@ function buildComponent(opts = {}) {
 function normalizeTarget(target) {
   const t = String(target || '@a').trim();
   if (['@a', '@p', '@r', '@s'].includes(t)) return t;
-  if (/^[A-Za-z0-9_]{1,16}$/.test(t)) return t;
+  if (PLAYER_NAME_RE.test(t)) return t;
   throw httpError(400, 'Invalid recipient — pick Everyone or a valid player name');
 }
 

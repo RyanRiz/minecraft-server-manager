@@ -5,6 +5,39 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each push is cut as a new release with
 its own dated entry.
 
+## [0.9.6] - 2026-08-10
+
+Fixes the item browser (used for giving/placing items) coming up empty on vanilla-ish
+servers, adds item icons, and fixes Bedrock (Geyser/Floodgate) players being effectively
+invisible to whitelist/ops/bans/kicks/teleports/inventory/chat and their own player page.
+
+### Fixed
+
+- **Item browser returned no results for vanilla items** — `itemRegistry.js` built its
+  item list by scanning the server's own jar for `assets/minecraft/lang/en_us.json`, but
+  official Mojang **server** jars never actually ship `assets/` (that's client-jar-only),
+  so every `minecraft:*` item silently came up missing — modded items were unaffected
+  since mod jars do ship unobfuscated lang files. When the server jar has no lang data,
+  the registry now falls back to an offline-cached, version-matched vanilla item/block
+  list from PrismarineJS/minecraft-data (MIT), with proper nearest-version resolution
+  (minecraft-data's `latest` folder turned out to only hold protocol data, not items —
+  version discovery now checks the real directory listing instead of trusting it).
+- **Item browser now shows an icon per row** — `GET /api/servers/:id/items` returns an
+  `iconBase` resolved from PrismarineJS/minecraft-assets (MIT) for the server's MC
+  version; the browser tries the item texture, falls back to the block texture, then a
+  generic glyph (mainly for modded items, which this asset pack doesn't cover).
+- **Bedrock players were invisible almost everywhere in the panel** — Floodgate prefixes
+  a Bedrock player's username with a "." (or "*") by default, but roughly a dozen
+  hand-duplicated username regexes across the codebase (`^[A-Za-z0-9_]{1,16}$`-shaped)
+  never allowed that prefix. Concretely this meant: the player-detail page 404'd the
+  moment you clicked a Bedrock player in the roster; join/leave/chat/death lines for
+  them were silently dropped from the activity feed; and whitelist/op/ban/kick/teleport/
+  inventory/chat-target actions all rejected their name with a 400. Consolidated every
+  one of those checks into a single shared pattern (`src/utils/playerName.js` /
+  `public/js/lib/playerName.js`) that accepts the Bedrock prefix. The player roster and
+  player-detail page also now show a controller icon + "Bedrock" chip for these players
+  instead of a bare "." avatar initial.
+
 ## [0.9.5] - 2026-08-10
 
 Server containers now actually run in the panel's configured timezone, instead of only the

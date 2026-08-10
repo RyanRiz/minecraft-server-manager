@@ -9,6 +9,7 @@ const db = require('../db');
 const { statsStream, statsOnce } = require('../docker/stats');
 const { execCapture, inspectStatus } = require('../docker/containers');
 const { fetchLogs } = require('../docker/logs');
+const { PLAYER_NAME_RE } = require('../utils/playerName');
 
 // Boot-phase detection: a modded first boot passes through many meaningful
 // states — surface them instead of a flat "starting/unhealthy". Ordered by
@@ -117,7 +118,7 @@ async function attach(serverId) {
             ? m[3]
                 .split(',')
                 .map((n) => n.trim())
-                .filter((n) => /^[A-Za-z0-9_]{2,16}$/.test(n))
+                .filter((n) => PLAYER_NAME_RE.test(n))
             : [],
           at: Date.now(),
         };

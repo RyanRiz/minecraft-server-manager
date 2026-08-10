@@ -9,6 +9,7 @@ import { openModal } from '../lib/modal.js';
 import { confirmDialog } from '../lib/confirm.js';
 import { openItemBrowser } from '../lib/itemBrowser.js';
 import { withBusy } from '../lib/loading.js';
+import { PLAYER_NAME_RE } from '../lib/playerName.js';
 
 const root = document.querySelector('[data-inventory-root]');
 if (root) init(root);
@@ -884,7 +885,7 @@ function init(root) {
               return input ? input.value.trim() : '';
             };
             const itemId = item ? item.id : f('item');
-            if (!/^[A-Za-z0-9_]{1,16}$/.test(f('player'))) {
+            if (!PLAYER_NAME_RE.test(f('player'))) {
               toast('Enter a valid player name', { kind: 'error' });
               return false;
             }
@@ -935,7 +936,7 @@ function init(root) {
             const f = (k) => body.querySelector(`[data-f="${k}"]`).value.trim();
             const player = f('player');
             const item = f('item');
-            if (!/^[A-Za-z0-9_]{1,16}$/.test(player)) {
+            if (!PLAYER_NAME_RE.test(player)) {
               toast('Enter a valid player name', { kind: 'error' });
               return false;
             }

@@ -1,6 +1,6 @@
 {
   "name": "minecraft-server-manager",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "description": "Minecraft Server Manager — a complete control panel for itzg/docker-minecraft-server",
   "private": true,
   "license": "MIT",

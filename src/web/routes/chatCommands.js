@@ -10,6 +10,7 @@ const { z } = require('zod');
 const servers = require('../../services/servers');
 const chatCommands = require('../../services/chatCommands');
 const { inspectStatus } = require('../../docker/containers');
+const { PLAYER_NAME_RE } = require('../../utils/playerName');
 
 const router = express.Router({ mergeParams: true });
 
@@ -127,7 +128,7 @@ router.post(
         player: z
           .string()
           .trim()
-          .regex(/^[A-Za-z0-9_]{1,16}$/, 'Player names are 1-16 letters, digits or _'),
+          .regex(PLAYER_NAME_RE, 'Player names are 1-16 letters, digits or _ (a leading . or * for Bedrock players is fine)'),
       })
       .parse(req.body);
     if (!(await isRunning(req.params.id))) {

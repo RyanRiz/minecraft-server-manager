@@ -13,12 +13,13 @@ const players = require('./players');
 const { recordEvent } = require('../events');
 const { execCapture } = require('../docker/containers');
 const { cleanText } = require('../utils/ansi');
+const { PLAYER_NAME_RE } = require('../utils/playerName');
 
 const TRIGGER_RE = /^[a-z0-9_-]{1,24}$/i;
 // 1-2 chars from a safe set. '/' is deliberately absent — real commands never
 // reach the chat log, so a '/' prefix could never fire.
 const PREFIX_RE = /^[!.#+?$%&*~^=-]{1,2}$/;
-const PLAYER_RE = /^[A-Za-z0-9_]{1,16}$/;
+const PLAYER_RE = PLAYER_NAME_RE;
 // Chat args substituted into console commands: strict shape or dropped.
 const ARG_RE = /^[A-Za-z0-9_:\-.]{0,32}$/;
 const ACTIONS = new Set(['rtp', 'structure', 'biome', 'console']);

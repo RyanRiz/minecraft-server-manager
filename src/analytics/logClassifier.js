@@ -9,12 +9,20 @@
 // with entity id" join and the "lost connection" leave) so the ingester can
 // collapse the pair into a single row.
 
+const { NAME_PATTERN } = require('../utils/playerName');
+
 // `[12:34:56] [Server thread/INFO]: ` and variants such as
 // `[12:34:56] [Server thread/INFO] [minecraft/MinecraftServer]: `.
 const PREFIX_RE = /^\[(\d{2}:\d{2}:\d{2})\] \[[^\]]+\](?: \[[^\]]+\])*:\s?/;
 
-const NAME = '[A-Za-z0-9_]{1,16}';
-const PLAYER_RE = new RegExp(`^[A-Za-z0-9_]{2,16}$`);
+// Includes Bedrock/Geyser-Floodgate's leading "." (or "*") prefix — without
+// it, every join/leave/chat/advancement/death line from a Bedrock player
+// silently failed to match and just vanished from the activity feed.
+const NAME = NAME_PATTERN;
+// Same, but a 2-char minimum: this one's used to tell a real player apart
+// from a single stray token in death-message parsing (`looksLikePlayer`),
+// where a 1-char match is more likely noise than a legitimate short name.
+const PLAYER_RE = /^[.*]?[A-Za-z0-9_]{2,16}$/;
 
 const CHAT_RE = new RegExp(`^<(${NAME})> (.*)$`);
 const SERVER_CHAT_RE = /^\[(?:Server|Rcon)\] (.*)$/;

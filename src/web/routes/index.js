@@ -12,6 +12,7 @@ const { serverVM, eventVM, crashVM, safeJsonParse } = require('../viewModels');
 const { fetchLogs } = require('../../docker/logs');
 const db = require('../../db');
 const { requireRole } = require('../middleware/auth');
+const { PLAYER_NAME_RE, isBedrockName } = require('../../utils/playerName');
 
 const router = express.Router();
 
@@ -193,12 +194,13 @@ router.get(
     const row = serversService.getServer(req.params.id);
     if (!row) return next();
     const name = String(req.params.name || '');
-    if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) return next();
+    if (!PLAYER_NAME_RE.test(name)) return next();
     const server = await serverVM(row);
     const playersService = require('../../services/players');
     const running = server.status === 'running' || server.status === 'unhealthy';
     let player = {
       name,
+      bedrock: isBedrockName(name),
       uuid: null,
       online: false,
       whitelisted: false,

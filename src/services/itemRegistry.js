@@ -1,16 +1,19 @@
 // @ts-nocheck — dynamic Docker/NBT/HTTP-JSON interop; not yet under checkJs (incremental typing).
 'use strict';
 
-// JEI-style item registry (offline). The list of every givable item/block on a
-// server is derived from the server's OWN files — no external API, so it works
-// for any loader, version or modpack:
+// JEI-style item registry. The list of every givable item/block on a server is
+// derived primarily from the server's OWN files, so mod items always work for
+// any loader, version or modpack with zero network dependency:
 //
 //   - every mod jar in  data/servers/<id>/mods/*.jar  ships lang files at
 //     assets/<modid>/lang/en_us.json with keys like
 //     "item.<ns>.<path>": "Display Name" / "block.<ns>.<path>": "Block Name"
-//   - the vanilla server jar ships assets/minecraft/lang/en_us.json. Modern
-//     Mojang jars are "bundlers": the real jar (with the assets) is nested at
-//     META-INF/versions/<v>/server-<v>.jar inside the outer jar.
+//   - the vanilla server jar, in theory, ships assets/minecraft/lang/en_us.json
+//     the same way, with modern "bundler" Mojang jars nesting the real jar at
+//     META-INF/versions/<v>/server-<v>.jar inside the outer jar — BUT in
+//     practice official server jars never actually contain assets/ (that's
+//     client-jar-only), so this path realistically always comes up empty. See
+//     fetchVanillaFallback() below for what actually supplies vanilla items.
 //
 // Only exact 3-segment keys are taken (item.ns.path — no dots inside path);
 // 4+ segment keys are sub-entries (.desc, .tooltip, …) and are skipped.
@@ -35,6 +38,51 @@ const META_RE = /^(META-INF\/(neoforge\.)?mods\.toml|fabric\.mod\.json|quilt\.mo
 const NESTED_SERVER_RE = /^META-INF\/versions\/[^/]+\/server[^/]*\.jar$/;
 const KEY_RE = /^(item|block)\.([a-z0-9_-]+)\.([a-z0-9_-]+)$/;
 const JAR_CONCURRENCY = 8;
+
+// Official Mojang SERVER jars (plain or the modern "bundler" form) never ship
+// assets/ — no lang files, no textures, that's client-jar-only. So on a vanilla
+// (or vanilla-based: Paper/Spigot/Forge/NeoForge with few mods) server,
+// readVanillaLang() below finds nothing and every minecraft:* item used to just
+// be silently missing from the registry. This offline-cached, MC-version-keyed
+// fallback (PrismarineJS/minecraft-data, MIT) fills that gap without needing
+// the client jar. Cached in api_cache like every other external fetch in this
+// codebase (see loaderVersions.js) — items/blocks lists are static per release,
+// so the TTL is long and a network hiccup just falls back to a stale cache.
+const MCDATA_BASE = 'https://cdn.jsdelivr.net/gh/PrismarineJS/minecraft-data@master/data/pc';
+const MCDATA_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+// PrismarineJS/minecraft-assets (MIT) — extracted per-version item/block PNGs,
+// used to show an icon next to each row in the item browser. Pinned to a
+// specific release so the CDN can't silently change shape under us; bump
+// deliberately (and extend ASSET_BUCKETS) when a new MC version needs textures.
+const ASSET_PKG_VERSION = '1.17.0';
+const ASSET_CDN_BASE = `https://cdn.jsdelivr.net/npm/minecraft-assets@${ASSET_PKG_VERSION}/minecraft-assets/data`;
+// Newest-first. Textures are bucketed by "when the art actually changed", not
+// every patch release, so a requested version maps to the closest bucket at
+// or before it.
+const ASSET_BUCKETS = [
+  '1.21.8',
+  '1.21.7',
+  '1.21.6',
+  '1.21.5',
+  '1.21.4',
+  '1.21.1',
+  '1.20.2',
+  '1.19.1',
+  '1.18.1',
+  '1.17.1',
+  '1.16.4',
+  '1.16.1',
+  '1.15.2',
+  '1.14.4',
+  '1.13.2',
+  '1.13',
+  '1.12',
+  '1.11.2',
+  '1.10',
+  '1.9',
+  '1.8.8',
+];
 
 const memory = new Map(); // serverId -> { fingerprint, registry }
 
@@ -277,6 +325,128 @@ async function readVanillaLang(serverId) {
 }
 
 // ---------------------------------------------------------------------------
+// minecraft-data fallback (vanilla items when the server jar has no assets/)
+
+async function cachedJson(cacheKey, url, ttlMs) {
+  const cached = db.get('SELECT value_json, fetched_at FROM api_cache WHERE key = ?', cacheKey);
+  if (cached && Date.now() - Date.parse(cached.fetched_at.replace(' ', 'T') + 'Z') < ttlMs) {
+    return JSON.parse(cached.value_json);
+  }
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    db.run(
+      `INSERT INTO api_cache (key, value_json, fetched_at) VALUES (?, ?, datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, fetched_at = excluded.fetched_at`,
+      cacheKey,
+      JSON.stringify(data)
+    );
+    return data;
+  } catch (err) {
+    if (cached) return JSON.parse(cached.value_json); // stale beats nothing
+    throw err;
+  }
+}
+
+async function fetchMcData(version) {
+  const [items, blocks] = await Promise.all([
+    cachedJson(`mcdata:items:${version}`, `${MCDATA_BASE}/${version}/items.json`, MCDATA_TTL_MS),
+    cachedJson(`mcdata:blocks:${version}`, `${MCDATA_BASE}/${version}/blocks.json`, MCDATA_TTL_MS),
+  ]);
+  return { items, blocks };
+}
+
+const MCDATA_VERSIONS_TTL_MS = 24 * 60 * 60 * 1000;
+const MCDATA_VERSIONS_URL = 'https://api.github.com/repos/PrismarineJS/minecraft-data/contents/data/pc';
+
+/** minecraft-data's version folders that actually carry real per-version data
+ *  (`latest` is a red herring — it only holds protocol.yml, no items/blocks). */
+async function listMcDataVersions() {
+  const entries = await cachedJson('mcdata:versions', MCDATA_VERSIONS_URL, MCDATA_VERSIONS_TTL_MS);
+  return entries.filter((e) => e.type === 'dir' && /^\d+\.\d+(\.\d+)?$/.test(e.name)).map((e) => e.name);
+}
+
+function parseVer(v) {
+  const m = /^(\d+)\.(\d+)(?:\.(\d+))?$/.exec(v);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3] || 0)] : null;
+}
+
+function cmpVer(a, b) {
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+}
+
+/** Closest available minecraft-data version to `requested` — exact, else the
+ *  newest one at or below it, else (requested is older than everything we
+ *  have) the oldest available. An unparsable/empty request just gets newest. */
+function nearestVersion(requested, available) {
+  const parsed = available.map((v) => ({ v, p: parseVer(v) })).filter((x) => x.p);
+  if (!parsed.length) return null;
+  parsed.sort((a, b) => cmpVer(b.p, a.p)); // newest first
+  const req = parseVer(requested);
+  if (!req) return parsed[0].v;
+  const exact = parsed.find((x) => cmpVer(x.p, req) === 0);
+  if (exact) return exact.v;
+  const notNewer = parsed.find((x) => cmpVer(x.p, req) <= 0);
+  return notNewer ? notNewer.v : parsed[parsed.length - 1].v;
+}
+
+/**
+ * Vanilla item/block entries for a server's MC version, sourced from
+ * minecraft-data instead of the (assets-less) server jar. Never throws — an
+ * unreachable network just means vanilla items stay absent, same as today.
+ * @returns {Promise<[{id, name, kind:'item'|'block', ns:'minecraft'}]|null>}
+ */
+async function fetchVanillaFallback(mcVersion) {
+  const raw = String(mcVersion || '').trim();
+  let version = raw && raw.toUpperCase() !== 'LATEST' ? raw : '';
+  try {
+    const available = await listMcDataVersions();
+    version = nearestVersion(version, available) || version;
+  } catch {
+    /* directory listing unreachable — fall through and try the raw string as-is */
+  }
+  if (!version) return null;
+  let data;
+  try {
+    data = await fetchMcData(version);
+  } catch {
+    return null;
+  }
+  const blockNames = new Set((data.blocks || []).map((b) => b.name));
+  return (data.items || [])
+    .filter((it) => it && it.name && it.displayName)
+    .map((it) => ({
+      id: `minecraft:${it.name}`,
+      name: it.displayName,
+      kind: blockNames.has(it.name) ? 'block' : 'item',
+      ns: 'minecraft',
+    }));
+}
+
+// ---------------------------------------------------------------------------
+// item icons (PrismarineJS/minecraft-assets, vanilla only — mod items never
+// have a texture here, callers should skip icons entirely for those)
+
+function resolveAssetBucket(mcVersion) {
+  const m = /^(\d+)\.(\d+)(?:\.(\d+))?/.exec(String(mcVersion || ''));
+  if (!m) return ASSET_BUCKETS[0];
+  const req = [Number(m[1]), Number(m[2]), Number(m[3] || 0)];
+  const cmp = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+  for (const bucket of ASSET_BUCKETS) {
+    const bm = /^(\d+)\.(\d+)(?:\.(\d+))?/.exec(bucket);
+    const bv = [Number(bm[1]), Number(bm[2]), Number(bm[3] || 0)];
+    if (cmp(bv, req) <= 0) return bucket;
+  }
+  return ASSET_BUCKETS[ASSET_BUCKETS.length - 1];
+}
+
+/** Base URL to build `${iconBase}/items/<path>.png` / `${iconBase}/blocks/<path>.png` from. */
+function iconBaseUrl(mcVersion) {
+  return `${ASSET_CDN_BASE}/${resolveAssetBucket(mcVersion)}`;
+}
+
+// ---------------------------------------------------------------------------
 // fingerprint — cheap change detection over the inputs
 
 async function computeFingerprint(serverId) {
@@ -312,7 +482,11 @@ async function computeFingerprint(serverId) {
       /* raced */
     }
   }
-  return `v1|${count}|${totalSize}|${Math.round(maxMtime)}|${vanilla}`;
+  // A server with no on-disk vanilla jar yet (never started) has no jar
+  // identity to key off — mc_version explicitly, so switching it pre-launch
+  // still invalidates the (otherwise empty) cached registry.
+  const mcVersion = require('./servers').getServer(serverId)?.mc_version || '';
+  return `v2|${count}|${totalSize}|${Math.round(maxMtime)}|${vanilla}|${mcVersion}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -340,6 +514,16 @@ async function buildRegistry(serverId, { onProgress = () => {} } = {}) {
       if (!byId.has(e.id)) byId.set(e.id, { id: e.id, name: e.name, mod: 'Minecraft', kind: e.kind });
     }
     modNames.set('minecraft', 'Minecraft');
+  } else {
+    // Server jars (vanilla or otherwise) never ship a client's assets/ — fall
+    // back to the offline-cached, version-keyed vanilla list.
+    const fallback = await fetchVanillaFallback(server.mc_version).catch(() => null);
+    if (fallback) {
+      for (const e of fallback) {
+        if (!byId.has(e.id)) byId.set(e.id, { id: e.id, name: e.name, mod: 'Minecraft', kind: e.kind });
+      }
+      modNames.set('minecraft', 'Minecraft');
+    }
   }
 
   const modsDir = dataPath('servers', serverId, 'mods');
@@ -526,8 +710,12 @@ module.exports = {
   getRegistry,
   getMods,
   search,
+  iconBaseUrl,
   // exported for tests
   parseLang,
   parseModsToml,
   computeFingerprint,
+  resolveAssetBucket,
+  fetchVanillaFallback,
+  nearestVersion,
 };
