@@ -14,7 +14,7 @@ const app = require('./helpers/app');
 
 test('toYaml/fromYaml round-trips only the 4 editable fields', () => {
   const spec = {
-    containerName: 'msm-survival',
+    containerName: 'survival-smp',
     network: 'proxy-net',
     image: 'itzg/minecraft-server:latest',
     resources: { memoryMb: 4096, swapMb: 0, cpus: 0 },
@@ -28,10 +28,10 @@ test('toYaml/fromYaml round-trips only the 4 editable fields', () => {
     env: { EULA: 'TRUE' },
   };
   const yaml = dockerSpec.toYaml(spec);
-  assert.match(yaml, /containerName: msm-survival/);
+  assert.match(yaml, /containerName: survival-smp/);
   const parsed = dockerSpec.fromYaml(yaml);
   assert.deepEqual(parsed, {
-    containerName: 'msm-survival',
+    containerName: 'survival-smp',
     networkName: 'proxy-net',
     extraPorts: [{ hostPort: 19132, containerPort: 19132, protocol: 'udp', label: 'Bedrock' }],
     extraBinds: [{ hostPath: '/opt/extra', containerPath: '/extra', mode: 'rw' }],
@@ -54,6 +54,11 @@ test('validateOverrides rejects a malformed container name', async () => {
 
 test('validateOverrides accepts an unset containerName/network (defaults)', async () => {
   await assert.doesNotReject(() => dockerSpec.validateOverrides({}));
+});
+
+test('validateOverrides reserves the msm- prefix (would let a name shadow another server’s container)', async () => {
+  await assert.rejects(() => dockerSpec.validateOverrides({ containerName: 'msm-hijack' }), /reserved/);
+  await assert.rejects(() => dockerSpec.validateOverrides({ containerName: 'MSM-hijack' }), /reserved/);
 });
 
 test('validateOverrides rejects duplicate host ports without ever probing the OS', async () => {

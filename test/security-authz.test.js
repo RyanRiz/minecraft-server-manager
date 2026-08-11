@@ -5,6 +5,8 @@
 //     (a read-only viewer must never reach server.properties / rcon.password)
 //   - the mods content routes reject path-traversal in the `file` param
 //   - the /settings and /storage pages are admin only
+//   - advanced Docker overrides (extra binds mount arbitrary host paths) are
+//     admin only — an operator must not be able to reach host root through them
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -63,6 +65,35 @@ test('mods delete rejects an encoded traversal in the :file param', async () => 
     cookie: adminCookie,
   });
   assert.equal(r.status, 400);
+});
+
+test('advanced Docker overrides are admin-only; plain operator updates still work', async () => {
+  const operatorCookie = await login('operator1', 'operatorpass123', 'operator');
+  app.seedServer('srv_sec02');
+
+  // The exact escalation this gate exists for: an operator binding the Docker
+  // socket (or any host path) into a container they control.
+  const binds = await app.req('PATCH', '/api/servers/srv_sec02', {
+    cookie: operatorCookie,
+    body: { extraBinds: [{ hostPath: '/var/run/docker.sock', containerPath: '/var/run/docker.sock' }] },
+  });
+  assert.equal(binds.status, 403);
+
+  const create = await app.req('POST', '/api/servers', {
+    cookie: operatorCookie,
+    body: { name: 'Op Server', type: 'VANILLA', mcVersion: 'LATEST', start: false, networkName: 'proxy' },
+  });
+  assert.equal(create.status, 403);
+
+  const networks = await app.req('GET', '/api/docker/networks', { cookie: operatorCookie });
+  assert.equal(networks.status, 403);
+
+  // Overrides absent → the operator's normal powers are untouched.
+  const rename = await app.req('PATCH', '/api/servers/srv_sec02', {
+    cookie: operatorCookie,
+    body: { name: 'Renamed by operator' },
+  });
+  assert.equal(rename.status, 200);
 });
 
 test('/settings and /storage pages are admin only', async () => {

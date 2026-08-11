@@ -23,7 +23,7 @@ const { fetchLogs } = require('../../docker/logs');
 const { statsOnce } = require('../../docker/stats');
 const dockerNetworks = require('../../docker/networks');
 const dockerSpec = require('../../services/dockerSpec');
-const { dockerOverridesSchema } = require('./dockerOverridesSchema');
+const { dockerOverridesSchema, requireAdminForOverrides } = require('./dockerOverridesSchema');
 
 const router = express.Router();
 
@@ -85,6 +85,7 @@ router.post(
   '/servers',
   asyncHandler(async (req, res, next) => {
     const input = createSchema.parse(req.body);
+    requireAdminForOverrides(req, input);
     const server = await servers.createServer(input, { actor: req.user.username, start: input.start !== false });
     res.status(201).json({ ok: true, server: publicServer(server) });
   })
@@ -131,6 +132,7 @@ router.patch(
         message: 'Container memory limit must be higher than the Java heap',
       })
       .parse(req.body);
+    requireAdminForOverrides(req, changes);
     if (
       changes.containerName !== undefined ||
       changes.networkName !== undefined ||
@@ -158,6 +160,7 @@ router.patch(
 
 router.get(
   '/docker/networks',
+  require('../middleware/auth').requireRole('admin'),
   asyncHandler(async (req, res) => {
     res.json({ ok: true, networks: await dockerNetworks.listNetworks() });
   })
@@ -181,6 +184,7 @@ const previewSchema = z.object({
 
 router.post(
   '/docker/preview',
+  require('../middleware/auth').requireRole('admin'),
   asyncHandler((req, res) => {
     const input = previewSchema.parse(req.body);
     res.json({ ok: true, yaml: dockerSpec.toYaml(servers.previewCreateSpec(input)) });
@@ -189,6 +193,7 @@ router.post(
 
 router.post(
   '/docker/preview/parse',
+  require('../middleware/auth').requireRole('admin'),
   asyncHandler((req, res) => {
     const { yaml: text } = z.object({ yaml: z.string().max(20000) }).parse(req.body);
     res.json({ ok: true, spec: dockerSpec.fromYaml(text) });
@@ -197,6 +202,7 @@ router.post(
 
 router.get(
   '/servers/:id/docker-spec',
+  require('../middleware/auth').requireRole('admin'),
   asyncHandler((req, res) => {
     requireServer(req.params.id);
     res.json({ ok: true, yaml: dockerSpec.toYaml(servers.previewServerSpec(req.params.id)) });
@@ -691,6 +697,7 @@ router.post(
   '/servers/from-pack',
   asyncHandler((req, res, next) => {
     const input = fromPackSchema.parse(req.body);
+    requireAdminForOverrides(req, input);
     const actor = req.user.username;
     const taskId = tasks.run(`Creating ${input.name} from a ${input.platform} pack`, { actor }, async (t) => {
       t.step('Resolving pack version (pinned — never "latest")');
@@ -1512,6 +1519,7 @@ router.post(
   '/servers/from-mods',
   asyncHandler((req, res, next) => {
     const input = fromModsSchema.parse(req.body);
+    requireAdminForOverrides(req, input);
     const actor = req.user.username;
     const type = input.loader.toUpperCase(); // fabric → FABRIC, etc. (all valid TYPEs)
     const taskId = tasks.run(`Creating ${input.name} (${input.loader})`, { actor }, async (t) => {

@@ -73,6 +73,14 @@ async function validateOverrides(
       `Container name "${containerName}" is invalid — use letters, digits, "_", ".", "-", starting with a letter or digit, up to 63 characters.`
     );
   }
+  // getContainer() resolves servers WITHOUT a custom name as msm-<id> — a
+  // custom name in that namespace could shadow another server's container and
+  // route every lifecycle action (stop, kill, exec…) to the wrong instance.
+  if (containerName != null && /^msm-/i.test(containerName)) {
+    errors.push(
+      `Container name "${containerName}" is reserved — the "msm-" prefix is used for the panel's own naming.`
+    );
+  }
 
   if (networkName) {
     const exists = await networks.networkExists(networkName);

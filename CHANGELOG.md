@@ -132,8 +132,10 @@ leaving the panel or reaching for the CLI.
 
 - **Advanced Docker Settings** — review and override the container the panel is about to create
   (or has already created):
-  - **Custom container name**, overriding the fixed `msm-<id>` pattern (e.g. `msm-survival`
-    instead of a randomized-looking ID).
+  - **Custom container name**, overriding the fixed `msm-<id>` pattern (e.g. `survival-smp`
+    instead of a randomized-looking ID). The `msm-` prefix itself is reserved — it's how the
+    panel resolves servers without a custom name, so a custom one there could shadow another
+    server's container.
   - **Docker network selection** — attach to an existing host network instead of the default
     bridge, for reverse proxies like Pangolin or NGINX. New `src/docker/networks.js` lists the
     host's networks via the Docker Engine API.
@@ -141,7 +143,10 @@ leaving the panel or reaching for the CLI.
     ports and single `/data` mount — e.g. UDP 19132 for Bedrock/Geyser, TCP 8100 for BlueMap, or
     a host config directory mounted straight into the container. Volume binds accept any
     absolute host path by design (the panel already holds Docker-socket, root-equivalent access);
-    only basic sanity checks (absolute path, no NUL bytes) apply.
+    only basic sanity checks (absolute path, no NUL bytes) apply. **Admin-only**: because binds
+    reach arbitrary host paths, every entry point (all four creation paths, the Settings PATCH,
+    and the preview/networks endpoints) rejects these fields for the operator role, and the UI
+    sections render only for admins.
   - Opt-in, under the wizard's existing "Advanced options" toggle — one-click creation for casual
     use is unchanged. Available across all four creation paths (vanilla/plugin wizard, from-pack,
     from-mods, blueprint import) and, post-creation, from a new "Docker settings" card on the

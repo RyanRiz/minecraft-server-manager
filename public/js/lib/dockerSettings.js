@@ -12,6 +12,10 @@ const REMOVE_ICON_SVG =
 
 /**
  * @param {object} ids - element ids: name, network, ports, binds, portAdd, bindAdd, previewBtn
+ *
+ * The card these ids live in is admin-only markup — for other roles every
+ * element is absent (and the endpoints 403), so all DOM access and the
+ * networks fetch degrade to no-ops rather than assuming the elements exist.
  */
 export function initDockerSettings(ids) {
   const nameInput = document.getElementById(ids.name);
@@ -23,20 +27,21 @@ export function initDockerSettings(ids) {
   // server's current row immediately on load) — remember the desired value and
   // re-apply it once the matching <option> actually exists.
   let pendingNetwork = null;
-  fetch('/api/docker/networks')
-    .then((res) => res.json())
-    .then((data) => {
-      if (!data.ok || !networkSel) return;
-      for (const net of data.networks) {
-        const opt = document.createElement('option');
-        opt.value = net.name;
-        opt.textContent = `${net.name} (${net.driver})`;
-        networkSel.appendChild(opt);
-      }
-      if (pendingNetwork != null) networkSel.value = pendingNetwork;
-      networkSel.dispatchEvent(new Event('change', { bubbles: true })); // sync the styled trigger
-    })
-    .catch(() => {}); // Docker unreachable — leave just the default option
+  if (networkSel)
+    fetch('/api/docker/networks')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.ok || !networkSel) return;
+        for (const net of data.networks) {
+          const opt = document.createElement('option');
+          opt.value = net.name;
+          opt.textContent = `${net.name} (${net.driver})`;
+          networkSel.appendChild(opt);
+        }
+        if (pendingNetwork != null) networkSel.value = pendingNetwork;
+        networkSel.dispatchEvent(new Event('change', { bubbles: true })); // sync the styled trigger
+      })
+      .catch(() => {}); // Docker unreachable — leave just the default option
 
   function addPortRow(value = {}) {
     const row = document.createElement('div');
@@ -80,6 +85,7 @@ export function initDockerSettings(ids) {
   document.getElementById(ids.bindAdd)?.addEventListener('click', () => addBindRow());
 
   function readPortRows() {
+    if (!portsWrap) return [];
     return [...portsWrap.querySelectorAll('[data-port-row]')]
       .map((row) => ({
         hostPort: Number(row.querySelector('[data-port-host]').value),
@@ -91,6 +97,7 @@ export function initDockerSettings(ids) {
   }
 
   function readBindRows() {
+    if (!bindsWrap) return [];
     return [...bindsWrap.querySelectorAll('[data-bind-row]')]
       .map((row) => ({
         hostPath: row.querySelector('[data-bind-host]').value.trim(),
@@ -107,10 +114,14 @@ export function initDockerSettings(ids) {
       networkSel.value = pendingNetwork;
       networkSel.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    portsWrap.innerHTML = '';
-    (extraPorts || []).forEach(addPortRow);
-    bindsWrap.innerHTML = '';
-    (extraBinds || []).forEach(addBindRow);
+    if (portsWrap) {
+      portsWrap.innerHTML = '';
+      (extraPorts || []).forEach(addPortRow);
+    }
+    if (bindsWrap) {
+      bindsWrap.innerHTML = '';
+      (extraBinds || []).forEach(addBindRow);
+    }
   }
 
   /**

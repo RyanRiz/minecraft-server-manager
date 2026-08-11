@@ -8,6 +8,7 @@
 // calls a zod schema can't make.
 
 const { z } = require('zod');
+const httpError = require('../../utils/httpError');
 
 const dockerOverridesSchema = {
   // '' is accepted (and only meaningful in a PATCH) as "clear it, go back to msm-<id>".
@@ -45,4 +46,30 @@ const dockerOverridesSchema = {
     .optional(),
 };
 
-module.exports = { dockerOverridesSchema };
+/**
+ * True when a request carries ANY of the 4 override fields — even to clear
+ * them. Every entry point admin-gates on this: extra binds mount arbitrary
+ * host paths into a container, which is host-root-equivalent, so operators
+ * (who keep every other server control) must not reach these. The UI omits
+ * untouched fields, so a non-admin request never trips this by accident.
+ */
+function overridesPresent(input) {
+  return (
+    input.containerName !== undefined ||
+    input.networkName !== undefined ||
+    input.extraPorts !== undefined ||
+    input.extraBinds !== undefined
+  );
+}
+
+/** Throw 403 unless override-carrying input comes from an admin. Call after zod parse at EVERY entry point. */
+function requireAdminForOverrides(req, input) {
+  if (overridesPresent(input) && req.user.role !== 'admin') {
+    throw httpError(
+      403,
+      'Advanced Docker settings (container name, network, extra ports/binds) require the admin role.'
+    );
+  }
+}
+
+module.exports = { dockerOverridesSchema, overridesPresent, requireAdminForOverrides };

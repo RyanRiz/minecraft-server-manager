@@ -288,6 +288,10 @@
         <p class="help">Raw escape hatch for anything new the image adds before the catalog catches up. One KEY=value per line; these override everything above.</p>
       </div>
     </details>
+    {{! Admin-only: extra binds mount arbitrary host paths (root-equivalent
+        through the Docker socket) — the API rejects these fields for other
+        roles, so don't render dead controls for them. }}
+    {{#if (eq user.role 'admin')}}
     <details class="card group">
       <summary class="flex cursor-pointer items-center gap-2.5 p-4 font-semibold marker:content-none">
         {{{icon 'container' 'size-4 text-ink-faint'}}} Advanced Docker settings
@@ -332,6 +336,7 @@
         </div>
       </div>
     </details>
+    {{/if}}
   </div>
 
   <div class="mt-6 flex items-center justify-between">

@@ -352,15 +352,19 @@ function init(serverId) {
     // server rendered. Sending all 4 unconditionally would run the (Docker-
     // socket-hitting) validateOverrides check on every unrelated save — e.g. a
     // Docker hiccup would then block renaming the server, not just changing
-    // its container settings.
-    const nowDocker = dockerSettings.collectOverrides({ forUpdate: true });
-    if (nowDocker.containerName !== initialDocker.containerName) body.containerName = nowDocker.containerName;
-    if (nowDocker.networkName !== initialDocker.networkName) body.networkName = nowDocker.networkName;
-    if (JSON.stringify(nowDocker.extraPorts) !== JSON.stringify(initialDocker.extraPorts)) {
-      body.extraPorts = nowDocker.extraPorts;
-    }
-    if (JSON.stringify(nowDocker.extraBinds) !== JSON.stringify(initialDocker.extraBinds)) {
-      body.extraBinds = nowDocker.extraBinds;
+    // its container settings. The card is admin-only markup: when absent,
+    // collectOverrides would read every field as cleared and an unrelated save
+    // would wipe (well, 403 on) the server's stored overrides — skip entirely.
+    if (document.getElementById('st-docker-name')) {
+      const nowDocker = dockerSettings.collectOverrides({ forUpdate: true });
+      if (nowDocker.containerName !== initialDocker.containerName) body.containerName = nowDocker.containerName;
+      if (nowDocker.networkName !== initialDocker.networkName) body.networkName = nowDocker.networkName;
+      if (JSON.stringify(nowDocker.extraPorts) !== JSON.stringify(initialDocker.extraPorts)) {
+        body.extraPorts = nowDocker.extraPorts;
+      }
+      if (JSON.stringify(nowDocker.extraBinds) !== JSON.stringify(initialDocker.extraBinds)) {
+        body.extraBinds = nowDocker.extraBinds;
+      }
     }
     // MOTD lives in env: merge over the server's current env (from the data
     // island) so nothing else is lost; § codes are what vanilla renders.

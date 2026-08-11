@@ -126,6 +126,9 @@
       </div>
     </div>
 
+    {{! Admin-only: same gate as the wizard's Advanced Docker settings — the
+        API 403s these fields for other roles. }}
+    {{#if (eq user.role 'admin')}}
     <div class="card p-4">
       <h3 class="mb-4 font-semibold">Docker settings</h3>
       <div class="space-y-4">
@@ -166,6 +169,7 @@
         </div>
       </div>
     </div>
+    {{/if}}
 
     <div class="card p-4">
       <h3 class="mb-3 font-semibold">Blueprint &amp; maintenance</h3>
