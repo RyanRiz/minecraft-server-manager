@@ -373,6 +373,10 @@ async function importBlueprint(zipRef, overrides = {}, { actor = 'system', onPro
       cpus: o.cpus ?? manifest.resources.cpus,
       diskQuotaGb: o.diskQuotaGb ?? manifest.resources.diskQuotaGb,
       updatePolicy: manifest.resources.updatePolicy,
+      containerName: o.containerName,
+      networkName: o.networkName,
+      extraPorts: o.extraPorts,
+      extraBinds: o.extraBinds,
     },
     { actor, start: false, onProgress }
   );

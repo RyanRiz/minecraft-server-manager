@@ -12,17 +12,20 @@ const { dataPath } = require('../storage/pathGuard');
 const { recordEvent } = require('../events');
 const { execCapture } = require('../docker/containers');
 const mojangProfiles = require('./mojangProfiles');
+const { PLAYER_NAME_RE, isBedrockName } = require('../utils/playerName');
 
 // Only these fixed filenames are ever touched — no user input reaches a path.
 const FILES = new Set(['usercache.json', 'whitelist.json', 'ops.json', 'banned-players.json', 'banned-ips.json']);
 
-const NAME_RE = /^[A-Za-z0-9_]{1,16}$/;
 const IP_RE = /^[0-9a-fA-F.:]{3,45}$/;
 const DIMENSIONS = new Set(['minecraft:overworld', 'minecraft:the_nether', 'minecraft:the_end']);
 
 function assertName(name) {
-  if (!NAME_RE.test(String(name)))
-    throw httpError(400, 'Invalid player name (letters, digits and _ only, max 16 chars)');
+  if (!PLAYER_NAME_RE.test(String(name)))
+    throw httpError(
+      400,
+      'Invalid player name (letters, digits and _ only, max 16 chars — a leading . or * for Bedrock players is fine)'
+    );
   return String(name);
 }
 
@@ -126,7 +129,7 @@ async function listOnlineNames(serverId, { throwOnError = false } = {}) {
       ? m[1]
           .split(',')
           .map((n) => n.trim())
-          .filter((n) => /^[A-Za-z0-9_]{2,16}$/.test(n))
+          .filter((n) => PLAYER_NAME_RE.test(n))
       : [];
   } catch (err) {
     if (throwOnError) throw err;
@@ -193,6 +196,7 @@ function listPlayers(serverId, onlineNames = []) {
     if (!entry) {
       entry = {
         name: name || '(unknown)',
+        bedrock: isBedrockName(name),
         uuid: null,
         online: false,
         whitelisted: false,
@@ -213,6 +217,7 @@ function listPlayers(serverId, onlineNames = []) {
     }
     if (name) {
       entry.name = name;
+      entry.bedrock = isBedrockName(name);
       byName.set(name.toLowerCase(), entry);
     } // canonical casing from files
     Object.assign(entry, patch);

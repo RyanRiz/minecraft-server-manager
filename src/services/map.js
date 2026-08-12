@@ -42,6 +42,64 @@ function supportsMap(server) {
   return SUPPORTED.has(server.type) || (modsService.isPackServer(server) && modsService.loaderOf(server));
 }
 
+/** Plugin servers read plugins/BlueMap/, mod servers config/bluemap/. */
+function mapConfDir(serverId, server) {
+  const rel = ['PAPER', 'PURPUR', 'PUFFERFISH', 'LEAF', 'FOLIA', 'SPIGOT'].includes(server.type)
+    ? ['plugins', 'BlueMap']
+    : ['config', 'bluemap'];
+  return dataPath('servers', serverId, ...rel);
+}
+
+// world/nether/end, matching BlueMap's OWN default map ids exactly — so this
+// either preempts BlueMap's auto-generation (fresh install, file doesn't
+// exist yet) or self-heals whatever it already auto-generated (existing file
+// with a stale `world:` line), rather than creating a second, differently
+// named map alongside a still-broken original.
+const DIM_CONFIGS = [
+  { suffix: '', file: 'world.conf', dimension: 'minecraft:overworld', name: 'Overworld' },
+  { suffix: '_nether', file: 'world_nether.conf', dimension: 'minecraft:the_nether', name: 'Nether' },
+  { suffix: '_the_end', file: 'world_the_end.conf', dimension: 'minecraft:the_end', name: 'End' },
+];
+
+/**
+ * Point BlueMap's per-dimension map configs at the server's ACTUAL world
+ * folder (server.properties level-name / LEVEL env) instead of BlueMap's own
+ * "world" / "world_nether" / "world_the_end" default guess. A server whose
+ * active world isn't literally named "world" otherwise makes every
+ * auto-generated map invalid — BlueMap logs "problem with your BlueMap
+ * setup" for each one and disables itself entirely ("no valid maps
+ * configured"), even though the world exists and is fine.
+ *
+ * Only ever touches the `world:` line — a file BlueMap (or the admin) already
+ * created keeps every other setting (name, sky-color, start-pos, …) as-is.
+ */
+function writeMapConfigs(serverId) {
+  const server = serversService.getServer(serverId);
+  if (!server) return;
+  const level = require('./worlds').activeLevelName(server);
+  const mapsDir = path.join(mapConfDir(serverId, server), 'maps');
+  fs.mkdirSync(mapsDir, { recursive: true });
+
+  for (const dim of DIM_CONFIGS) {
+    const worldFolder = level + dim.suffix;
+    // Nether/end aren't generated until first visited — skip rather than
+    // point BlueMap at a dir that doesn't exist yet (same failure this fixes).
+    if (dim.suffix && !fs.existsSync(dataPath('servers', serverId, worldFolder))) continue;
+
+    const file = path.join(mapsDir, dim.file);
+    const worldLine = `world: "${worldFolder}"`;
+    if (!fs.existsSync(file)) {
+      fs.writeFileSync(file, `${worldLine}\ndimension: "${dim.dimension}"\nname: "${dim.name}"\n`);
+      continue;
+    }
+    const text = fs.readFileSync(file, 'utf8');
+    const escaped = worldFolder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`^world\\s*:\\s*"?${escaped}"?\\s*$`, 'm').test(text)) continue; // already correct
+    const patched = /^world\s*:.*$/m.test(text) ? text.replace(/^world\s*:.*$/m, worldLine) : `${worldLine}\n${text}`;
+    fs.writeFileSync(file, patched);
+  }
+}
+
 async function enableMap(serverId, { actor = 'system' } = {}) {
   const server = serversService.getServer(serverId);
   if (!server) throw httpError(404, 'Server not found');
@@ -62,12 +120,8 @@ async function enableMap(serverId, { actor = 'system' } = {}) {
   );
 
   // Pre-accept BlueMap's resource download so the map works without a manual
-  // config edit (BlueMap merges missing keys with its defaults). Plugin
-  // servers read plugins/BlueMap/, mod servers config/bluemap/.
-  const confDirRel = ['PAPER', 'PURPUR', 'PUFFERFISH', 'LEAF', 'FOLIA', 'SPIGOT'].includes(server.type)
-    ? ['plugins', 'BlueMap']
-    : ['config', 'bluemap'];
-  const confDir = dataPath('servers', serverId, ...confDirRel);
+  // config edit (BlueMap merges missing keys with its defaults).
+  const confDir = mapConfDir(serverId, server);
   fs.mkdirSync(confDir, { recursive: true });
   const coreConf = path.join(confDir, 'core.conf');
   if (!fs.existsSync(coreConf)) {
@@ -78,6 +132,7 @@ async function enableMap(serverId, { actor = 'system' } = {}) {
       fs.readFileSync(coreConf, 'utf8').replace(/accept-download\s*:\s*false/, 'accept-download: true')
     );
   }
+  writeMapConfigs(serverId);
   db.run('UPDATE servers SET pending_recreate = 1 WHERE id = ?', serverId);
   recordEvent({
     serverId,
@@ -130,4 +185,12 @@ async function freePort() {
   throw httpError(503, 'No free port for the map web server');
 }
 
-module.exports = { getMapConfig, supportsMap, enableMap, disableMap, extraPortsFor, BLUEMAP_CONTAINER_PORT };
+module.exports = {
+  getMapConfig,
+  supportsMap,
+  enableMap,
+  disableMap,
+  extraPortsFor,
+  writeMapConfigs,
+  BLUEMAP_CONTAINER_PORT,
+};

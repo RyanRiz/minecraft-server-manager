@@ -5,6 +5,173 @@ All notable changes to this project are documented here. The format is based on
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Each push is cut as a new release with
 its own dated entry.
 
+## [0.9.6] - 2026-08-10
+
+Fixes the item browser (used for giving/placing items) coming up empty on vanilla-ish
+servers, adds item icons, and fixes Bedrock (Geyser/Floodgate) players being effectively
+invisible to whitelist/ops/bans/kicks/teleports/inventory/chat and their own player page.
+
+### Fixed
+
+- **Item browser returned no results for vanilla items** — `itemRegistry.js` built its
+  item list by scanning the server's own jar for `assets/minecraft/lang/en_us.json`, but
+  official Mojang **server** jars never actually ship `assets/` (that's client-jar-only),
+  so every `minecraft:*` item silently came up missing — modded items were unaffected
+  since mod jars do ship unobfuscated lang files. When the server jar has no lang data,
+  the registry now falls back to an offline-cached, version-matched vanilla item/block
+  list from PrismarineJS/minecraft-data (MIT), with proper nearest-version resolution
+  (minecraft-data's `latest` folder turned out to only hold protocol data, not items —
+  version discovery now checks the real directory listing instead of trusting it).
+- **Item browser now shows an icon per row** — `GET /api/servers/:id/items` returns an
+  `iconBase` resolved from PrismarineJS/minecraft-assets (MIT) for the server's MC
+  version; the browser tries the item texture, falls back to the block texture, then a
+  generic glyph (mainly for modded items, which this asset pack doesn't cover).
+- **Bedrock players were invisible almost everywhere in the panel** — Floodgate prefixes
+  a Bedrock player's username with a "." (or "*") by default, but roughly a dozen
+  hand-duplicated username regexes across the codebase (`^[A-Za-z0-9_]{1,16}$`-shaped)
+  never allowed that prefix. Concretely this meant: the player-detail page 404'd the
+  moment you clicked a Bedrock player in the roster; join/leave/chat/death lines for
+  them were silently dropped from the activity feed; and whitelist/op/ban/kick/teleport/
+  inventory/chat-target actions all rejected their name with a 400. Consolidated every
+  one of those checks into a single shared pattern (`src/utils/playerName.js` /
+  `public/js/lib/playerName.js`) that accepts the Bedrock prefix. The player roster and
+  player-detail page also now show a controller icon + "Bedrock" chip for these players
+  instead of a bare "." avatar initial.
+
+## [0.9.5] - 2026-08-10
+
+Server containers now actually run in the panel's configured timezone, instead of only the
+scheduler ([0.9.3]) and BlueMap's map configs ([0.9.4]) knowing about it.
+
+### Fixed
+
+- **Container clock stayed on UTC regardless of Settings → Localization** — `assembleEnv()` in
+  `src/services/servers.js` built every container's env without ever setting `TZ`, so the itzg
+  image defaulted it to UTC. The Minecraft server's own console timestamps, and any other
+  in-container tooling that reads `TZ` (e.g. `mc-server-runner`'s own log lines), stayed in UTC
+  even after the panel's timezone was set to something else. `assembleEnv()` now defaults
+  `env.TZ` to `settings.getTimezone()` when a server doesn't already set its own `TZ` via the
+  advanced env fields.
+  - This only takes effect on container **creation** — an already-running server needs to be
+    recreated (not just restarted) to pick up the new env var, same as any other advanced
+    Docker setting change.
+
+## [0.9.4] - 2026-08-10
+
+Fixes the live map (BlueMap) failing entirely on any server whose world isn't literally named
+"world".
+
+### Fixed
+
+- **BlueMap couldn't find a custom-named world** — enabling the live map never told BlueMap what
+  the server's actual world folder is. BlueMap only auto-generates its per-dimension map configs
+  (`maps/world.conf`, `world_nether.conf`, `world_the_end.conf`) once, on first launch, guessing
+  the folder is literally named `world`/`world_nether`/`world_the_end`. Any server using a custom
+  level name (`LEVEL` env, a renamed/switched world) got every generated map pointed at a folder
+  that doesn't exist — BlueMap logged "problem with your BlueMap setup" for each one and disabled
+  itself entirely ("no valid maps configured"), even though the world was completely fine.
+  `src/services/map.js` now writes (or, for a setup that already hit this, surgically patches —
+  every other line an admin or BlueMap itself set stays untouched) the correct `world:` path for
+  whichever world is actually active, both when the map is first enabled and whenever the active
+  world changes afterward (rename or switch, via a new hook in `services/worlds.js`'s
+  `setActiveLevel`). Nether/end configs are only written once those dimension folders actually
+  exist, so a fresh world with an unvisited Nether doesn't get a bogus entry either.
+
+## [0.9.3] - 2026-08-10
+
+Scheduled tasks (restart / backup / RCON commands / global maintenance) fire at the right
+real-world time again.
+
+### Fixed
+
+- **Schedules ignored the configured panel timezone** — `src/services/scheduler.js` created every
+  croner job without a `timezone` option, so `"0 3 * * *"` fired at 3am in the SYSTEM's timezone
+  (UTC in almost every container) rather than 3am in whatever zone Settings → Localization has
+  configured. A scheduled RCON command, restart, or backup could run hours off from what the
+  cron expression visually says. All four `new Cron(...)` call sites (job creation, validation,
+  the `next run` computation in `listSchedules`, and the `/api/schedules/preview` endpoint used
+  by the New Schedule modal's live preview) now pass `{ timezone: settings.getTimezone() }`.
+- Changing the timezone in Settings now re-arms every already-created schedule immediately
+  (new `scheduler.rearmAll()`, called from `POST /api/settings/localization`) — previously an
+  existing schedule kept running on whichever zone was in effect when it was created until the
+  panel restarted.
+
+## [0.9.2] - 2026-08-10
+
+Fixes the live map (BlueMap) never coming up through the panel's proxy for containerized-panel
+deployments, especially reverse-proxy setups (Pangolin, NGINX, Traefik…) where a server's Docker
+network is set so the proxy reaches it directly.
+
+### Fixed
+
+- **Live map proxy couldn't reach a sibling container in several common topologies** —
+  `src/web/routes/mapProxy.js` previously always dialed `127.0.0.1:<hostPort>`, which is only
+  correct on bare metal. It now tries, per server: every Docker-network IP the sibling container
+  has (its own container port, no host-port involved — this is what actually works when a
+  server's network is set in Advanced Docker Settings for a reverse proxy to reach it directly),
+  then the host-published-port path via `host.docker.internal` (containerized panel) or
+  `127.0.0.1` (bare metal). Whichever answers is cached per server (re-probed if it later stops
+  responding) so the extra connectivity check doesn't slow down every tile/asset request.
+  `docker-compose.yml` adds the `extra_hosts: host.docker.internal:host-gateway` mapping the
+  fallback path needs on Linux, plus a commented example for joining the panel to a shared
+  reverse-proxy network so the direct-container-IP path has a route. New `MAP_PROXY_HOST` env var
+  overrides the auto-detected host outright.
+- **Live-map readiness probe used `HEAD`** (`public/js/pages/map.js`) — switched to `GET`, since
+  BlueMap's bundled webserver isn't guaranteed to implement `HEAD`; a probe that never succeeds
+  looked identical to "BlueMap just isn't up yet" and retried forever.
+- The map proxy's error response now distinguishes "the map-proxy host name itself didn't
+  resolve" (almost always a missing `extra_hosts` entry) from "BlueMap isn't responding yet",
+  instead of one generic message for both.
+
+## [0.9.1] - 2026-08-09
+
+Full control over the generated Docker container — name, network, ports, volumes — without ever
+leaving the panel or reaching for the CLI.
+
+### Added
+
+- **Advanced Docker Settings** — review and override the container the panel is about to create
+  (or has already created):
+  - **Custom container name**, overriding the fixed `msm-<id>` pattern (e.g. `survival-smp`
+    instead of a randomized-looking ID). The `msm-` prefix itself is reserved — it's how the
+    panel resolves servers without a custom name, so a custom one there could shadow another
+    server's container.
+  - **Docker network selection** — attach to an existing host network instead of the default
+    bridge, for reverse proxies like Pangolin or NGINX. New `src/docker/networks.js` lists the
+    host's networks via the Docker Engine API.
+  - **Extra port mappings** and **extra volume binds** beyond the built-in game/RCON/Bedrock
+    ports and single `/data` mount — e.g. UDP 19132 for Bedrock/Geyser, TCP 8100 for BlueMap, or
+    a host config directory mounted straight into the container. Volume binds accept any
+    absolute host path by design (the panel already holds Docker-socket, root-equivalent access);
+    only basic sanity checks (absolute path, no NUL bytes) apply. **Admin-only**: because binds
+    reach arbitrary host paths, every entry point (all four creation paths, the Settings PATCH,
+    and the preview/networks endpoints) rejects these fields for the operator role, and the UI
+    sections render only for admins.
+  - Opt-in, under the wizard's existing "Advanced options" toggle — one-click creation for casual
+    use is unchanged. Available across all four creation paths (vanilla/plugin wizard, from-pack,
+    from-mods, blueprint import) and, post-creation, from a new "Docker settings" card on the
+    server's Settings tab, applied via the existing Recreate flow.
+- **"Preview as YAML"** — an editable text preview of the generated container params
+  (new `src/services/dockerSpec.js`, using the new `js-yaml` dependency) that parses edits back
+  into the same structured fields on Apply. Re-validated server-side both on Apply and again on
+  the real create/update request — the textarea's contents are never trusted just because they
+  started from a server-generated preview.
+- Migration `007_docker_advanced.js` adds `container_name`, `network_name`, `extra_ports_json`
+  and `extra_binds_json` to `servers`; NULL/`[]` defaults keep every pre-existing server's
+  container byte-identical (default name, bridge network, single `/data` bind) with no backfill
+  needed.
+
+### Fixed
+
+- **GHCR image name is now lowercased before build** — the `Docker` workflow derives `IMAGE_NAME`
+  from `${GITHUB_REPOSITORY,,}` before `docker/build-push-action` runs. Docker/OCI tags must be
+  all-lowercase, so a mixed-case GitHub owner or repo name (e.g. `OwenWright8/...`) previously
+  failed the build outright.
+- **Port-collision check missed ports it should have known about** — `dbPortsInUse` (used to
+  suggest and validate ports) now unions in each server's extra port mappings and BlueMap's own
+  web-server port (tracked separately in the `integrations` table), closing a latent gap where a
+  freshly suggested port could silently collide with either.
+
 ## [0.9.0] - 2026-08-09
 
 Containerized deployment (closes [#1](https://github.com/anefzaoui/minecraft-server-manager/issues/1)):

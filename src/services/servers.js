@@ -18,6 +18,8 @@ const { suggestPorts, isPortFree } = require('./ports');
 const containers = require('../docker/containers');
 const images = require('../docker/images');
 const { fetchLogs } = require('../docker/logs');
+const dockerSpec = require('./dockerSpec');
+const settings = require('./settings');
 
 function rowToServer(row) {
   if (!row) return null;
@@ -25,6 +27,10 @@ function rowToServer(row) {
     ...row,
     tags: JSON.parse(row.tags_json || '[]'),
     env: JSON.parse(row.env_json || '{}'),
+    containerName: row.container_name || null,
+    networkName: row.network_name || null,
+    extraPorts: JSON.parse(row.extra_ports_json || '[]'),
+    extraBinds: JSON.parse(row.extra_binds_json || '[]'),
   };
 }
 
@@ -69,6 +75,11 @@ function assembleEnv(server) {
   }
   env.RCON_PASSWORD = rconPassword;
   env.STOP_DURATION = env.STOP_DURATION || '60';
+  // The itzg image defaults TZ to UTC, which makes the JVM's own console
+  // timestamps disagree with every other time shown in the panel (which
+  // uses the configured panel timezone). Inherit it unless the user set
+  // their own TZ for this server via the advanced env fields.
+  env.TZ = env.TZ || settings.getTimezone();
   // CurseForge features need the API key inside the container. It lives in
   // the panel's encrypted store — inject it whenever anything CF is in play.
   const usesCurseforge =
@@ -102,6 +113,86 @@ function assembleEnv(server) {
 function resolveImage(server) {
   const tag = server.java_tag || pickJavaTag(server.mc_version, server.type);
   return images.imageRef(tag);
+}
+
+/**
+ * Combine BlueMap's own (integrations-table-tracked) extra port with the
+ * server's user-defined extra ports into the single array `createContainer`
+ * expects. Lazily requires ./map — map.js requires this module (for
+ * getServer), so a top-level require here would be circular.
+ */
+function mergeExtraPorts(server) {
+  const bluemapPorts = require('./map').extraPortsFor(server.id);
+  const userPorts = (server.extraPorts || []).map((p) => ({
+    container: `${p.containerPort}/${p.protocol}`,
+    host: p.hostPort,
+  }));
+  return [...bluemapPorts, ...userPorts];
+}
+
+/**
+ * Best-effort preview of the container params a `createServer(input)` call
+ * would produce — no persistence, no port allocation (unassigned ports show
+ * as a placeholder since the real ones aren't claimed until creation).
+ * Feeds the wizard's "Advanced Docker Settings" YAML preview.
+ */
+function previewCreateSpec(input) {
+  const javaTag = input.javaTag || pickJavaTag(input.mcVersion || 'LATEST', input.type || 'VANILLA');
+  const image = images.imageRef(javaTag);
+  const defaults = config.defaults;
+  const env = { ...(input.env || {}) };
+  env.EULA = 'TRUE';
+  env.TYPE = input.type || 'VANILLA';
+  if (input.mcVersion && input.mcVersion !== 'LATEST') env.VERSION = input.mcVersion;
+  env.MEMORY = `${input.heapMb ?? defaults.heapMb}M`;
+  env.ENABLE_RCON = 'true';
+  env.RCON_PASSWORD = '(generated at creation)';
+  return {
+    containerName: input.containerName || null,
+    network: input.networkName || null,
+    image,
+    resources: {
+      memoryMb: input.containerMemoryMb ?? defaults.containerMemoryMb,
+      swapMb: input.containerSwapMb ?? 0,
+      cpus: input.cpus ?? defaults.cpus,
+    },
+    ports: {
+      game: input.portGame || '(auto-assigned)',
+      rcon: input.portRcon || (input.portGame ? input.portGame + config.ports.rconOffset : '(auto-assigned)'),
+      bedrock: input.withBedrock ? input.portBedrock || '(auto-assigned)' : null,
+      extra: input.extraPorts || [],
+    },
+    volumes: {
+      data: '<panel data dir>/servers/<server id> -> /data',
+      extra: input.extraBinds || [],
+    },
+    env,
+  };
+}
+
+/** Same shape as previewCreateSpec, but from a real, already-created server. */
+function previewServerSpec(id) {
+  const server = mustGet(id);
+  const env = assembleEnv(server);
+  env.RCON_PASSWORD = '(hidden)';
+  if (env.CF_API_KEY) env.CF_API_KEY = '(hidden)';
+  return {
+    containerName: server.containerName || containers.containerName(server.id),
+    network: server.networkName || null,
+    image: resolveImage(server),
+    resources: { memoryMb: server.container_memory_mb, swapMb: server.container_swap_mb, cpus: server.cpus },
+    ports: {
+      game: server.port_game,
+      rcon: server.port_rcon,
+      bedrock: server.port_bedrock,
+      extra: server.extraPorts,
+    },
+    volumes: {
+      data: `${dataPath('servers', id)} -> /data`,
+      extra: server.extraBinds,
+    },
+    env,
+  };
 }
 
 // Creates are serialized through this chain so two concurrent creates can't both
@@ -162,6 +253,13 @@ async function createServerImpl(input, { actor = 'system', start = false, onProg
     ports = await suggestPorts({ withBedrock: Boolean(input.withBedrock) });
   }
 
+  await dockerSpec.validateOverrides({
+    containerName: input.containerName,
+    networkName: input.networkName,
+    extraPorts: input.extraPorts,
+    extraBinds: input.extraBinds,
+  });
+
   const rconPassword = secrets.generatePassword();
   const defaults = config.defaults;
 
@@ -169,8 +267,9 @@ async function createServerImpl(input, { actor = 'system', start = false, onProg
     `INSERT INTO servers (id, display_name, description, icon, accent, tags_json, type, mc_version,
        java_tag, env_json, port_game, port_rcon, port_query, port_bedrock, rcon_password_cipher,
        heap_mb, container_memory_mb, container_swap_mb, cpus, disk_quota_bytes, quota_strict,
-       update_policy, auto_start, auto_restart, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped')`,
+       update_policy, auto_start, auto_restart, status, container_name, network_name,
+       extra_ports_json, extra_binds_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?)`,
     id,
     input.name,
     input.description || '',
@@ -194,7 +293,11 @@ async function createServerImpl(input, { actor = 'system', start = false, onProg
     input.quotaStrict ? 1 : 0,
     input.updatePolicy || 'manual',
     input.autoStart ? 1 : 0,
-    input.autoRestart === false ? 0 : 1
+    input.autoRestart === false ? 0 : 1,
+    input.containerName || null,
+    input.networkName || null,
+    JSON.stringify(input.extraPorts || []),
+    JSON.stringify(input.extraBinds || [])
   );
 
   const server = getServer(id);
@@ -216,8 +319,11 @@ async function createServerImpl(input, { actor = 'system', start = false, onProg
       env: assembleEnv(server),
       dataDir: dataPath('servers', id),
       ports: { game: server.port_game, rcon: server.port_rcon, bedrock: server.port_bedrock },
-      extraPorts: require('./map').extraPortsFor(server.id),
+      extraPorts: mergeExtraPorts(server),
       resources: { memoryMb: server.container_memory_mb, swapMb: server.container_swap_mb, cpus: server.cpus },
+      containerName: server.containerName,
+      networkName: server.networkName,
+      extraBinds: server.extraBinds,
     });
     db.run('UPDATE servers SET container_id = ? WHERE id = ?', containerId, id);
   } catch (err) {
@@ -234,6 +340,9 @@ async function createServerImpl(input, { actor = 'system', start = false, onProg
       fs.rmSync(dataPath('logs', id), { recursive: true, force: true });
     } catch {
       /* best effort */
+    }
+    if (err.statusCode === 409 && input.containerName) {
+      throw httpError(409, `Container name "${input.containerName}" is already in use by another Docker container`);
     }
     throw err;
   }
@@ -355,15 +464,26 @@ async function recreateServerImpl(id, { actor = 'system', quiet = false } = {}) 
 
   const image = resolveImage(server);
   await images.ensureImage(image);
-  const containerId = await containers.createContainer({
-    serverId: id,
-    image,
-    env: assembleEnv(server),
-    dataDir: dataPath('servers', id),
-    ports: { game: server.port_game, rcon: server.port_rcon, bedrock: server.port_bedrock },
-    extraPorts: require('./map').extraPortsFor(server.id),
-    resources: { memoryMb: server.container_memory_mb, swapMb: server.container_swap_mb, cpus: server.cpus },
-  });
+  let containerId;
+  try {
+    containerId = await containers.createContainer({
+      serverId: id,
+      image,
+      env: assembleEnv(server),
+      dataDir: dataPath('servers', id),
+      ports: { game: server.port_game, rcon: server.port_rcon, bedrock: server.port_bedrock },
+      extraPorts: mergeExtraPorts(server),
+      resources: { memoryMb: server.container_memory_mb, swapMb: server.container_swap_mb, cpus: server.cpus },
+      containerName: server.containerName,
+      networkName: server.networkName,
+      extraBinds: server.extraBinds,
+    });
+  } catch (err) {
+    if (err.statusCode === 409 && server.containerName) {
+      throw httpError(409, `Container name "${server.containerName}" is already in use by another Docker container`);
+    }
+    throw err;
+  }
   db.run('UPDATE servers SET container_id = ?, pending_recreate = 0 WHERE id = ?', containerId, id);
   if (!quiet)
     recordEvent({ serverId: id, actor, type: 'recreated', summary: 'Container recreated with current configuration' });
@@ -412,6 +532,36 @@ function updateServer(id, changes, { actor = 'system' } = {}) {
     diff.env = ['(changed)', '(changed)'];
     sets.push('env_json = ?');
     params.push(JSON.stringify(changes.env));
+    needsRecreate = true;
+  }
+  if (changes.containerName !== undefined) {
+    const val = changes.containerName ? changes.containerName.trim() : null;
+    if (val !== (before.container_name || null)) {
+      diff.containerName = [before.container_name, val];
+      sets.push('container_name = ?');
+      params.push(val);
+      needsRecreate = true;
+    }
+  }
+  if (changes.networkName !== undefined) {
+    const val = changes.networkName ? changes.networkName.trim() : null;
+    if (val !== (before.network_name || null)) {
+      diff.networkName = [before.network_name, val];
+      sets.push('network_name = ?');
+      params.push(val);
+      needsRecreate = true;
+    }
+  }
+  if (changes.extraPorts !== undefined) {
+    diff.extraPorts = ['(changed)', '(changed)'];
+    sets.push('extra_ports_json = ?');
+    params.push(JSON.stringify(changes.extraPorts));
+    needsRecreate = true;
+  }
+  if (changes.extraBinds !== undefined) {
+    diff.extraBinds = ['(changed)', '(changed)'];
+    sets.push('extra_binds_json = ?');
+    params.push(JSON.stringify(changes.extraBinds));
     needsRecreate = true;
   }
   if (changes.diskQuotaGb !== undefined) {
@@ -599,4 +749,6 @@ module.exports = {
   ensureOwnership,
   dirSize,
   setConsoleLabel,
+  previewCreateSpec,
+  previewServerSpec,
 };

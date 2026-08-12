@@ -5,6 +5,7 @@ import { toast } from '../lib/toast.js';
 import { openModal } from '../lib/modal.js';
 import { confirmDialog } from '../lib/confirm.js';
 import { withBusy } from '../lib/loading.js';
+import { PLAYER_NAME_RE } from '../lib/playerName.js';
 
 const root = document.querySelector('[data-commands-root]');
 if (root) init(root);
@@ -464,7 +465,7 @@ function init(root) {
           busyLabel: 'Running…',
           onClick: async ({ body }) => {
             const player = body.querySelector('[data-f="player"]').value.trim();
-            if (!/^[A-Za-z0-9_]{1,16}$/.test(player)) {
+            if (!PLAYER_NAME_RE.test(player)) {
               toast('Enter a valid player name', { kind: 'error' });
               return false;
             }

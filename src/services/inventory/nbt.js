@@ -6,9 +6,10 @@
 // formats, and generic nested-inventory (backpack/shulker) detection.
 
 const httpError = require('../../utils/httpError');
+const { PLAYER_NAME_RE } = require('../../utils/playerName');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const NAME_RE = /^[A-Za-z0-9_]{1,16}$/;
+const NAME_RE = PLAYER_NAME_RE;
 // Item ids travel through RCON — restrict to registry-shaped ids so nothing
 // can smuggle command fragments.
 const ITEM_RE = /^([a-z0-9_.-]+:)?[a-z0-9_./-]{1,120}$/;

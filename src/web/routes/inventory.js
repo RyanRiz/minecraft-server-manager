@@ -13,6 +13,8 @@ const { z } = require('zod');
 const servers = require('../../services/servers');
 const inventory = require('../../services/inventory');
 const { inspectStatus } = require('../../docker/containers');
+const { PLAYER_NAME_RE } = require('../../utils/playerName');
+const itemRegistry = require('../../services/itemRegistry');
 
 const router = express.Router({ mergeParams: true });
 
@@ -25,7 +27,7 @@ const uuidSchema = z
 const nameSchema = z
   .string()
   .trim()
-  .regex(/^[A-Za-z0-9_]{1,16}$/, 'Player names are 1-16 letters, digits or _');
+  .regex(PLAYER_NAME_RE, 'Player names are 1-16 letters, digits or _ (a leading . or * for Bedrock players is fine)');
 const itemSchema = z
   .string()
   .trim()
@@ -124,6 +126,7 @@ router.get(
       ok: true,
       running,
       player,
+      iconBase: itemRegistry.iconBaseUrl(),
       edit: {
         online: ctx.online,
         mechanism: ctx.mechanism, // 'rcon' (live commands) | 'file' (.dat rewrite + backup)

@@ -5,6 +5,7 @@ import { toast } from '../lib/toast.js';
 import { openModal } from '../lib/modal.js';
 import { confirmDialog } from '../lib/confirm.js';
 import { withBusy } from '../lib/loading.js';
+import { PLAYER_NAME_RE } from '../lib/playerName.js';
 
 const root = document.querySelector('[data-players-root]');
 if (root) init(root);
@@ -251,7 +252,7 @@ function init(root) {
               const name = body.querySelector('[data-f="name"]').value.trim();
               const wl = body.querySelector('[data-f="whitelist"]').checked;
               const op = body.querySelector('[data-f="op"]').checked;
-              if (!/^[A-Za-z0-9_]{1,16}$/.test(name)) {
+              if (!PLAYER_NAME_RE.test(name)) {
                 toast('Enter a valid player name', { kind: 'error' });
                 return false;
               }

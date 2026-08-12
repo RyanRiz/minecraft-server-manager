@@ -32,3 +32,8 @@ test('normalizeTarget accepts selectors and names but rejects entity selectors',
   assert.throws(() => chat.normalizeTarget('bad name!'));
   assert.throws(() => chat.normalizeTarget('waytoolongusername_123'));
 });
+
+test('normalizeTarget accepts Bedrock (Geyser/Floodgate) names with a leading . or *', () => {
+  assert.equal(chat.normalizeTarget('.Steve'), '.Steve');
+  assert.equal(chat.normalizeTarget('*Alex'), '*Alex');
+});

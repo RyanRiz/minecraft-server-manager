@@ -15,6 +15,7 @@ const { z } = require('zod');
 const { nanoid } = require('nanoid');
 const blueprints = require('../../blueprints');
 const { dataPath } = require('../../storage/pathGuard');
+const { dockerOverridesSchema, requireAdminForOverrides } = require('./dockerOverridesSchema');
 
 const router = express.Router();
 
@@ -43,6 +44,7 @@ const overridesSchema = z.object({
   containerMemoryMb: z.coerce.number().int().min(1024).max(524288).optional(),
   cpus: z.coerce.number().min(0).max(128).optional(),
   diskQuotaGb: z.coerce.number().min(0).max(16384).optional(),
+  ...dockerOverridesSchema,
 });
 
 router.get(
@@ -114,6 +116,7 @@ router.post(
         return res.status(404).json({ ok: false, error: 'Uploaded blueprint expired — upload it again' });
       }
     }
+    if (input.overrides) requireAdminForOverrides(req, input.overrides);
     const { server, report } = await blueprints.importBlueprint(zipRef, input.overrides || {}, {
       actor: req.user.username,
     });

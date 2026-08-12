@@ -67,3 +67,21 @@ test('looksLikePlayer distinguishes names from mobs', () => {
   assert.equal(looksLikePlayer('zombie'), false);
   assert.equal(looksLikePlayer('a'), false); // too short
 });
+
+test('classifies join/leave/chat/death for Bedrock (Geyser/Floodgate) names', () => {
+  assert.deepEqual(classify(`${P}<.Steve> hi from bedrock`), {
+    time: '12:34:56',
+    type: 'chat',
+    player: '.Steve',
+    target: '',
+    message: 'hi from bedrock',
+  });
+  assert.equal(classify(`${P}.Steve joined the game`).player, '.Steve');
+  assert.equal(classify(`${P}.Steve left the game`).player, '.Steve');
+
+  const pvp = classify(`${P}.Steve was slain by .Alex`);
+  assert.equal(pvp.type, 'death');
+  assert.equal(pvp.target, '.Alex');
+  assert.equal(isPvp(pvp), true);
+  assert.equal(looksLikePlayer('.Steve'), true);
+});

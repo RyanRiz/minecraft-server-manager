@@ -5,6 +5,7 @@ import { openModal } from '../lib/modal.js';
 import { runTask } from '../lib/progress.js';
 import { attachMotdEditor, toSectionCodes } from '../lib/motd.js';
 import { setBusy } from '../lib/loading.js';
+import { initDockerSettings } from '../lib/dockerSettings.js';
 
 const root = document.querySelector('[data-settings-server]');
 if (root) init(root.dataset.settingsServer);
@@ -13,6 +14,30 @@ function init(serverId) {
   let icon = root.dataset.settingsIcon;
   let accent = root.dataset.settingsAccent;
   const tags = new Set(JSON.parse(root.dataset.settingsTags || '[]'));
+
+  // ---- Advanced Docker settings: name, network, extra ports/binds ----
+  const initialDocker = {
+    containerName: root.dataset.settingsDockerName || '',
+    networkName: root.dataset.settingsDockerNetwork || '',
+    extraPorts: JSON.parse(root.dataset.settingsDockerPorts || '[]'),
+    extraBinds: JSON.parse(root.dataset.settingsDockerBinds || '[]'),
+  };
+  const dockerSettings = initDockerSettings({
+    name: 'st-docker-name',
+    network: 'st-docker-network',
+    ports: 'st-docker-ports',
+    binds: 'st-docker-binds',
+    portAdd: 'st-docker-port-add',
+    bindAdd: 'st-docker-bind-add',
+    previewBtn: 'st-docker-preview',
+  });
+  dockerSettings.seed(initialDocker);
+  dockerSettings.openPreview(async () => {
+    const res = await fetch(`/api/servers/${serverId}/docker-spec`);
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Preview failed');
+    return data.yaml;
+  });
 
   // ---- dirty tracking: Save always works, but Discard/leave now warn instead
   // of silently dropping edits ----
@@ -323,6 +348,24 @@ function init(serverId) {
       autoStart: document.getElementById('st-autostart')?.checked ?? false,
       autoRestart: document.getElementById('st-autorestart')?.checked ?? true,
     };
+    // Docker settings: only send a field that actually changed from what the
+    // server rendered. Sending all 4 unconditionally would run the (Docker-
+    // socket-hitting) validateOverrides check on every unrelated save — e.g. a
+    // Docker hiccup would then block renaming the server, not just changing
+    // its container settings. The card is admin-only markup: when absent,
+    // collectOverrides would read every field as cleared and an unrelated save
+    // would wipe (well, 403 on) the server's stored overrides — skip entirely.
+    if (document.getElementById('st-docker-name')) {
+      const nowDocker = dockerSettings.collectOverrides({ forUpdate: true });
+      if (nowDocker.containerName !== initialDocker.containerName) body.containerName = nowDocker.containerName;
+      if (nowDocker.networkName !== initialDocker.networkName) body.networkName = nowDocker.networkName;
+      if (JSON.stringify(nowDocker.extraPorts) !== JSON.stringify(initialDocker.extraPorts)) {
+        body.extraPorts = nowDocker.extraPorts;
+      }
+      if (JSON.stringify(nowDocker.extraBinds) !== JSON.stringify(initialDocker.extraBinds)) {
+        body.extraBinds = nowDocker.extraBinds;
+      }
+    }
     // MOTD lives in env: merge over the server's current env (from the data
     // island) so nothing else is lost; § codes are what vanilla renders.
     if (motdInput) {

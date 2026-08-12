@@ -13,6 +13,7 @@ import { setBusy, withBusy } from '../lib/loading.js';
 import { enhanceSelect } from '../lib/select.js';
 import { showPackDetails, packIconHtml, formatDownloads } from './modpacks.js';
 import { attachMotdEditor, toSectionCodes } from '../lib/motd.js';
+import { initDockerSettings } from '../lib/dockerSettings.js';
 
 const root = document.getElementById('wizard');
 if (root) init();
@@ -214,6 +215,43 @@ function init() {
     };
   }
 
+  // ---- Advanced Docker settings: name, network, extra ports/binds ----
+  const dockerSettings = initDockerSettings({
+    name: 'wz-docker-name',
+    network: 'wz-docker-network',
+    ports: 'wz-docker-ports',
+    binds: 'wz-docker-binds',
+    portAdd: 'wz-docker-port-add',
+    bindAdd: 'wz-docker-bind-add',
+    previewBtn: 'wz-docker-preview',
+  });
+  dockerSettings.openPreview(async () => {
+    const r = resources();
+    const body = {
+      type,
+      mcVersion: document.getElementById('wz-version')?.value,
+      heapMb: r.heapMb,
+      containerMemoryMb: r.containerMemoryMb,
+      portGame: r.portGame,
+      env: collectSimpleEnv(),
+      ...collectDockerOverrides(),
+    };
+    const res = await fetch('/api/docker/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Preview failed');
+    return data.yaml;
+  });
+
+  /** Only meaningful under Advanced options — matches collectAdvancedEnv's own guard. */
+  function collectDockerOverrides() {
+    if (!advPanel || advPanel.classList.contains('hidden')) return {};
+    return dockerSettings.collectOverrides();
+  }
+
   document.getElementById('wz-create').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     if (btn.dataset.busy) return;
@@ -262,6 +300,7 @@ function init() {
             ...(document.getElementById('wz-desc').value.trim()
               ? { description: document.getElementById('wz-desc').value.trim() }
               : {}),
+            ...collectDockerOverrides(),
           },
         }),
       });
@@ -298,6 +337,7 @@ function init() {
       versionId: document.getElementById('wz-pack-version')?.value || selection.resolved.versionId,
       ...r,
       env: collectSimpleEnv(),
+      ...collectDockerOverrides(),
     };
     try {
       const result = await runTask({
@@ -358,6 +398,7 @@ function init() {
       mods,
       ...resources(),
       env: collectSimpleEnv(),
+      ...collectDockerOverrides(),
     };
     try {
       const result = await runTask({
@@ -404,6 +445,7 @@ function init() {
       mcVersion: document.getElementById('wz-version').value,
       ...resources(),
       env: collectSimpleEnv(),
+      ...collectDockerOverrides(),
       start: true,
     };
 

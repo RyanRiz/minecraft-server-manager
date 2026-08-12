@@ -9,6 +9,8 @@ import { openModal } from '../lib/modal.js';
 import { confirmDialog } from '../lib/confirm.js';
 import { openItemBrowser } from '../lib/itemBrowser.js';
 import { withBusy } from '../lib/loading.js';
+import { PLAYER_NAME_RE } from '../lib/playerName.js';
+import { glyphFor } from '../lib/itemGlyph.js';
 
 const root = document.querySelector('[data-inventory-root]');
 if (root) init(root);
@@ -23,6 +25,7 @@ function init(root) {
   let currentData = null;
   let editInfo = null; // {online, mechanism: 'rcon'|'file', nestedEditable}
   let selectedSnaps = []; // rel file paths, max 2
+  let iconBase = ''; // minecraft-assets CDN base for this server's MC version (vanilla only)
 
   const el = (id) => document.getElementById(id);
   const playerSel = el('inv-player');
@@ -156,10 +159,31 @@ function init(root) {
         [where, hasNested ? 'has contents' : '', editable ? 'click to edit' : ''].filter(Boolean).join(' · ')
       );
       cell.innerHTML = `
-        <span>${esc(abbrev(item.id))}</span>
+        <span data-slot-abbrev>${esc(abbrev(item.id))}</span>
         ${item.count > 1 ? `<span class="absolute bottom-0 right-0.5 text-[9px] font-bold">${esc(item.count)}</span>` : ''}
         ${enchanted ? '<span class="absolute left-0.5 top-0 text-[9px]">*</span>' : ''}
         ${hasNested ? '<span class="absolute left-0.5 bottom-0.5 size-1.5 rounded-full bg-grass-400" aria-hidden="true"></span>' : ''}`;
+      // The bundled icon set only covers vanilla — modded items (and the rare
+      // vanilla id it's missing) just keep the text abbreviation as-is.
+      if (iconBase && item.id.startsWith('minecraft:')) {
+        const abbrevEl = cell.querySelector('[data-slot-abbrev]');
+        const img = document.createElement('img');
+        img.className = 'pointer-events-none absolute inset-0.5 object-contain [image-rendering:pixelated]';
+        img.alt = '';
+        img.loading = 'lazy';
+        img.src = `${iconBase}/${item.id.slice('minecraft:'.length)}.png`;
+        img.addEventListener('load', () => abbrevEl?.classList.add('hidden'));
+        img.addEventListener('error', () => {
+          // No local texture (bed/banner/chest/head/… — see itemGlyph.js) —
+          // a purpose-built glyph beats the 2-3 letter text abbreviation.
+          const glyph = document.createElement('span');
+          glyph.className = 'pointer-events-none absolute inset-1';
+          glyph.innerHTML = glyphFor(item.id);
+          img.replaceWith(glyph);
+          abbrevEl?.classList.add('hidden');
+        });
+        cell.appendChild(img);
+      }
     }
     if (onPick) cell.addEventListener('click', () => onPick(item || null));
     else if (at) cell.addEventListener('click', () => (item ? openSlotMenu(at, item) : openPlaceFlow(at)));
@@ -568,9 +592,10 @@ function init(root) {
   async function loadInventory(fresh = false) {
     if (!currentUuid) return;
     try {
-      const { player, edit } = await api(`/player/${currentUuid}${fresh ? '?fresh=1' : ''}`);
+      const { player, edit, iconBase: base } = await api(`/player/${currentUuid}${fresh ? '?fresh=1' : ''}`);
       currentData = player;
       editInfo = edit || null;
+      if (base) iconBase = base;
       renderInventory(player);
       el('inv-view').classList.remove('hidden');
     } catch (err) {
@@ -884,7 +909,7 @@ function init(root) {
               return input ? input.value.trim() : '';
             };
             const itemId = item ? item.id : f('item');
-            if (!/^[A-Za-z0-9_]{1,16}$/.test(f('player'))) {
+            if (!PLAYER_NAME_RE.test(f('player'))) {
               toast('Enter a valid player name', { kind: 'error' });
               return false;
             }
@@ -935,7 +960,7 @@ function init(root) {
             const f = (k) => body.querySelector(`[data-f="${k}"]`).value.trim();
             const player = f('player');
             const item = f('item');
-            if (!/^[A-Za-z0-9_]{1,16}$/.test(player)) {
+            if (!PLAYER_NAME_RE.test(player)) {
               toast('Enter a valid player name', { kind: 'error' });
               return false;
             }

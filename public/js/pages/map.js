@@ -13,7 +13,10 @@ import { setBusy } from '../lib/loading.js';
   async function probe() {
     let up = false;
     try {
-      up = (await fetch(frame.dataset.src || frame.src, { method: 'HEAD' })).ok;
+      // GET, not HEAD: the iframe only ever GETs this URL, and BlueMap's
+      // bundled webserver isn't guaranteed to implement HEAD — a HEAD-only
+      // probe could report "down" forever even once the map is genuinely up.
+      up = (await fetch(frame.dataset.src || frame.src, { method: 'GET' })).ok;
     } catch {
       /* down */
     }
