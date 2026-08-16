@@ -8,7 +8,6 @@ const {
   REST,
   Routes,
   EmbedBuilder,
-  AttachmentBuilder,
   PermissionFlagsBits,
   MessageFlags,
   escapeMarkdown,
@@ -16,9 +15,6 @@ const {
 const { request: undiciRequest, Headers: UndiciHeaders } = require('undici');
 const { STATUS_CODES } = require('node:http');
 const { types } = require('node:util');
-const fs = require('node:fs');
-const path = require('node:path');
-const config = require('../config');
 const db = require('../db');
 const settings = require('../services/settings');
 const apiKeys = require('../services/apiKeys');
@@ -28,7 +24,6 @@ const chat = require('../services/chat');
 const { execCapture, inspectStatus } = require('../docker/containers');
 const events = require('../events');
 const { recordEvent } = events;
-const { dataPath } = require('../storage/pathGuard');
 const { cleanText } = require('../utils/ansi');
 
 const KIND = 'discord-bot';
@@ -65,29 +60,6 @@ const SETTING_KEYS = {
 };
 
 const restartJobs = new Map();
-const BUILTIN_SERVER_ICONS = new Set(['chest', 'creeper', 'diamond', 'grass', 'portal', 'potion', 'sword', 'tnt']);
-
-function statusIconAttachment(server) {
-  try {
-    const icon = String(server?.icon || 'grass');
-    let abs;
-    let name;
-    if (icon.startsWith('custom:')) {
-      const file = icon.slice('custom:'.length);
-      if (!/^srv_[\w-]+\.(png|svg|jpg)$/i.test(file)) return null;
-      abs = dataPath('library', 'icons', 'custom', file);
-      name = `server-icon${path.extname(file).toLowerCase()}`;
-    } else {
-      const bundled = BUILTIN_SERVER_ICONS.has(icon) ? icon : 'grass';
-      abs = path.join(config.root, 'public', 'icons', 'servers', `${bundled}.png`);
-      name = 'server-icon.png';
-    }
-    return fs.existsSync(abs) ? new AttachmentBuilder(abs, { name }) : null;
-  } catch {
-    return null; // A thumbnail must never make /status fail.
-  }
-}
-
 function plainMotd(value, fallback) {
   const motd = cleanText(String(value || fallback || '')).replace(/&[0-9a-fk-or]/gi, '').trim();
   return motd ? motd.slice(0, 1024) : 'Not set';
@@ -497,9 +469,8 @@ class DiscordBot {
   }
 
   async commandStatus(interaction, serverId) {
-    // A status response can include a local thumbnail attachment. Acknowledge
-    // first so Discord never expires the slash-command interaction while the
-    // attachment is prepared or uploaded.
+    // Acknowledge first so Discord never expires the slash-command interaction
+    // while live server data is being read.
     await interaction.deferReply();
     const server = servers.getServer(serverId);
     const live = require('../services/liveCache').get(serverId);
@@ -523,9 +494,7 @@ class DiscordBot {
       )
       .setFooter({ text: 'Checked at' })
       .setTimestamp();
-    const icon = statusIconAttachment(server);
-    if (icon) embed.setThumbnail(`attachment://${icon.name}`);
-    return interaction.editReply({ embeds: [embed], ...(icon ? { files: [icon] } : {}) });
+    return interaction.editReply({ embeds: [embed] });
   }
 
   async commandPlayers(interaction, serverId) {

@@ -118,6 +118,6 @@ test('/status renders the detailed server embed without a website field', async 
   assert.equal(fields.MOTD, 'Wholesome Minecraft Server');
   assert.equal(fields.VERSION, '1.21.5');
   assert.equal(Object.hasOwn(fields, 'WEBSITE'), false);
-  assert.match(embed.thumbnail.url, /^attachment:\/\/server-icon/);
-  assert.equal(reply.files.length, 1);
+  assert.equal(embed.thumbnail, undefined);
+  assert.equal(reply.files, undefined);
 });
