@@ -24,10 +24,42 @@ function init(root) {
   function render(next) {
     const bot = next.bot || {};
     const binding = next.binding || {};
-    const status = el('ig-bot-root').querySelector('[data-bot-status]');
-    status.textContent = bot.running ? 'Connected' : bot.configured ? 'Stopped' : 'Not configured';
-    status.classList.toggle('badge-ok', Boolean(bot.running));
-    status.classList.toggle('badge-muted', !bot.running);
+    const running = Boolean(bot.running);
+    const configured = Boolean(bot.configured);
+    const connection = root.querySelector('[data-bot-connection]');
+    const status = root.querySelector('[data-bot-status]');
+    const detail = root.querySelector('[data-bot-status-detail]');
+    const dot = root.querySelector('[data-bot-status-dot]');
+    status.textContent = running ? 'Bot running' : configured ? 'Bot stopped' : 'Not configured';
+    detail.textContent = running
+      ? `Connected${bot.username ? ` as ${bot.username}` : ''}. ${binding.enabled ? 'This server is live.' : 'Enable this server binding to receive commands.'}`
+      : configured
+        ? 'Commands, notifications, and relay are offline.'
+        : 'Add a token and Guild ID before starting the bot.';
+    status.classList.toggle('text-ok', running);
+    status.classList.toggle('text-ink-faint', !running);
+    dot.classList.toggle('bg-grass-500', running);
+    dot.classList.toggle('bg-stone-500', !running);
+    connection.classList.toggle('border-ok/40', running);
+    connection.classList.toggle('bg-grass-600/10', running);
+    connection.classList.toggle('border-line', !running);
+    connection.classList.toggle('bg-inset', !running);
+
+    const start = el('ig-bot-start');
+    const stop = el('ig-bot-stop');
+    const test = el('ig-bot-test');
+    if (start) {
+      start.disabled = !admin || running || !configured;
+      start.textContent = running ? 'Bot running' : 'Start bot';
+      start.dataset.tip = running ? 'The bot is already connected.' : configured ? 'Connect the bot to Discord.' : 'Save a token and Guild ID first.';
+      start.classList.toggle('btn-primary', !running && configured);
+    }
+    if (stop) {
+      stop.disabled = !admin || !running;
+      stop.dataset.tip = running ? 'Disconnect the bot from Discord.' : 'The bot is already stopped.';
+      stop.classList.toggle('btn-danger', running);
+    }
+    if (test) test.disabled = !admin || !running || !binding.enabled;
     el('ig-bot-token').value = '';
     el('ig-bot-guild').value = bot.guildId || '';
     el('ig-bot-admin-role').value = bot.adminRoleId || '';

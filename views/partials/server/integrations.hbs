@@ -6,9 +6,13 @@
         <h3 class="flex items-center gap-2 font-semibold">{{{icon 'bot' 'size-4 text-link'}}} Discord bot</h3>
         <p class="mt-1 text-xs text-ink-faint">One panel-wide bot. This server owns the channel binding; global credentials and command roles are shared by every server.</p>
       </div>
-      <span class="badge {{#if integrations.discordBot.bot.running}}badge-ok{{else}}badge-muted{{/if}}" data-bot-status>
-        {{#if integrations.discordBot.bot.running}}Connected{{else}}Stopped{{/if}}
-      </span>
+      <div class="flex items-center gap-2 rounded-md border border-line bg-inset px-2.5 py-1.5" data-bot-connection aria-live="polite">
+        <span class="status-dot relative {{#if integrations.discordBot.bot.running}}bg-grass-500{{else}}bg-stone-500{{/if}}" data-bot-status-dot></span>
+        <div class="text-right leading-tight">
+          <p class="text-xs font-semibold {{#if integrations.discordBot.bot.running}}text-ok{{else}}text-ink-faint{{/if}}" data-bot-status>{{#if integrations.discordBot.bot.running}}Bot running{{else}}Bot stopped{{/if}}</p>
+          <p class="mt-0.5 text-[11px] text-ink-faint" data-bot-status-detail>{{#if integrations.discordBot.bot.running}}Discord Gateway connected{{else}}Commands and relay are offline{{/if}}</p>
+        </div>
+      </div>
     </div>
 
     <div class="grid gap-4 xl:grid-cols-3">
@@ -43,7 +47,7 @@
         <div class="flex flex-wrap gap-2">
           <button class="btn btn-primary" id="ig-bot-save-binding" {{unless (eq user.role 'admin') 'disabled'}}>Save binding</button>
           <button class="btn" id="ig-bot-test" {{unless (eq user.role 'admin') 'disabled'}}>Send test</button>
-          <button class="btn" id="ig-bot-start" {{unless (eq user.role 'admin') 'disabled'}}>Start bot</button>
+          <button class="btn btn-primary" id="ig-bot-start" {{unless (eq user.role 'admin') 'disabled'}}>Start bot</button>
           <button class="btn" id="ig-bot-stop" {{unless (eq user.role 'admin') 'disabled'}}>Stop bot</button>
           <button class="btn btn-danger" id="ig-bot-reset" {{unless (eq user.role 'admin') 'disabled'}}>Reset all bot config</button>
         </div>
