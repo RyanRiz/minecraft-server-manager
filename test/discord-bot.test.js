@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const app = require('./helpers/app');
 const auth = require('../src/services/auth');
 const discordBot = require('../src/integrations/discordBot');
+const db = require('../src/db');
 
 let adminCookie;
 let operatorCookie;
@@ -89,3 +90,29 @@ test('permissions are global and binding/event changes remain admin-only', async
   assert.equal(saved.json.permissions.broadcast, 'admin');
 });
 
+test('/status renders the detailed server embed without a website field', async () => {
+  db.run(
+    "UPDATE servers SET status = 'running', mc_version = '1.21.5', env_json = ? WHERE id = ?",
+    JSON.stringify({ MAX_PLAYERS: '30', MOTD: '§aWholesome Minecraft Server' }),
+    'srv_bot01'
+  );
+  let reply;
+  await discordBot.bot.commandStatus(
+    {
+      reply: async (payload) => {
+        reply = payload;
+      },
+    },
+    'srv_bot01'
+  );
+  const embed = reply.embeds[0].toJSON();
+  const fields = Object.fromEntries(embed.fields.map((field) => [field.name, field.value]));
+  assert.equal(embed.title, 'Minecraft Server: Test Server');
+  assert.match(fields.STATUS, /Online/);
+  assert.match(fields.PLAYERS, /0\/30/);
+  assert.equal(fields.MOTD, 'Wholesome Minecraft Server');
+  assert.equal(fields.VERSION, '1.21.5');
+  assert.equal(Object.hasOwn(fields, 'WEBSITE'), false);
+  assert.match(embed.thumbnail.url, /^attachment:\/\/server-icon/);
+  assert.equal(reply.files.length, 1);
+});

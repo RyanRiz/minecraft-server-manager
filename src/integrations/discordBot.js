@@ -8,6 +8,7 @@ const {
   REST,
   Routes,
   EmbedBuilder,
+  AttachmentBuilder,
   PermissionFlagsBits,
   MessageFlags,
   escapeMarkdown,
@@ -15,6 +16,9 @@ const {
 const { request: undiciRequest, Headers: UndiciHeaders } = require('undici');
 const { STATUS_CODES } = require('node:http');
 const { types } = require('node:util');
+const fs = require('node:fs');
+const path = require('node:path');
+const config = require('../config');
 const db = require('../db');
 const settings = require('../services/settings');
 const apiKeys = require('../services/apiKeys');
@@ -24,6 +28,8 @@ const chat = require('../services/chat');
 const { execCapture, inspectStatus } = require('../docker/containers');
 const events = require('../events');
 const { recordEvent } = events;
+const { dataPath } = require('../storage/pathGuard');
+const { cleanText } = require('../utils/ansi');
 
 const KIND = 'discord-bot';
 const PROVIDER = 'discord-bot';
@@ -59,6 +65,33 @@ const SETTING_KEYS = {
 };
 
 const restartJobs = new Map();
+const BUILTIN_SERVER_ICONS = new Set(['chest', 'creeper', 'diamond', 'grass', 'portal', 'potion', 'sword', 'tnt']);
+
+function statusIconAttachment(server) {
+  try {
+    const icon = String(server?.icon || 'grass');
+    let abs;
+    let name;
+    if (icon.startsWith('custom:')) {
+      const file = icon.slice('custom:'.length);
+      if (!/^srv_[\w-]+\.(png|svg|jpg)$/i.test(file)) return null;
+      abs = dataPath('library', 'icons', 'custom', file);
+      name = `server-icon${path.extname(file).toLowerCase()}`;
+    } else {
+      const bundled = BUILTIN_SERVER_ICONS.has(icon) ? icon : 'grass';
+      abs = path.join(config.root, 'public', 'icons', 'servers', `${bundled}.png`);
+      name = 'server-icon.png';
+    }
+    return fs.existsSync(abs) ? new AttachmentBuilder(abs, { name }) : null;
+  } catch {
+    return null; // A thumbnail must never make /status fail.
+  }
+}
+
+function plainMotd(value, fallback) {
+  const motd = cleanText(String(value || fallback || '')).replace(/&[0-9a-fk-or]/gi, '').trim();
+  return motd ? motd.slice(0, 1024) : 'Not set';
+}
 
 function safeBody(value) {
   if (value == null) return null;
@@ -456,8 +489,29 @@ class DiscordBot {
   async commandStatus(interaction, serverId) {
     const server = servers.getServer(serverId);
     const live = require('../services/liveCache').get(serverId);
-    const embed = new EmbedBuilder().setTitle(`Minecraft Server: ${server.display_name}`).setColor(server.status === 'running' ? 0x3fa62b : 0xe5484d).addFields({ name: 'Status', value: statusText(server), inline: true }, { name: 'Players', value: `${live.players?.online ?? 0}`, inline: true }).setTimestamp();
-    return interaction.reply({ embeds: [embed] });
+    const playerCount = live.players?.online ?? 0;
+    const playerMax = live.players?.max ?? (Number(server.env?.MAX_PLAYERS) || 20);
+    const playerNames = (live.players?.names || []).map((name) => `• ${escapeMarkdown(name)}`).join('\n');
+    const address = settings.publicAddress(server.port_game);
+    const embed = new EmbedBuilder()
+      .setTitle(`Minecraft Server: ${server.display_name}`)
+      .setColor(['running', 'starting', 'unhealthy'].includes(server.status) ? 0x3fa62b : 0xe5484d)
+      .addFields(
+        { name: 'STATUS', value: statusText(server), inline: true },
+        { name: 'PLAYERS', value: `${playerCount}/${playerMax}${playerNames ? `\n${playerNames}` : '\nNo players online'}`, inline: true },
+        { name: 'MOTD', value: plainMotd(server.env?.MOTD, server.display_name), inline: false },
+        {
+          name: 'SERVER ADDRESS',
+          value: address ? `\`${address}\`` : `Port \`${server.port_game}\` (public host not configured)`,
+          inline: false,
+        },
+        { name: 'VERSION', value: String(server.mc_version || 'Unknown').slice(0, 1024), inline: true }
+      )
+      .setFooter({ text: 'Checked at' })
+      .setTimestamp();
+    const icon = statusIconAttachment(server);
+    if (icon) embed.setThumbnail(`attachment://${icon.name}`);
+    return interaction.reply({ embeds: [embed], ...(icon ? { files: [icon] } : {}) });
   }
 
   async commandPlayers(interaction, serverId) {
