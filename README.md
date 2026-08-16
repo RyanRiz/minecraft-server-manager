@@ -64,8 +64,10 @@ copy to migrate.**
   give/clear via RCON.
 - **Investigation**: advisory x-ray suspicion scoring from ore-discovery ratios vs the server
   median; evidence laid out, never auto-punishing.
-- **Discord**: webhook notifications (lifecycle, crashes, backups, updates, player actions) with
-  per-event toggles; URLs stored encrypted.
+- **Discord**: encrypted per-server webhook notifications plus an optional panel-wide Discord bot.
+  Bind one command/notification channel (and an optional chat-relay channel) to each server; the bot
+  exposes role-gated `/status`, `/players`, `/start`, `/stop`, `/restart`, `/save`, `/broadcast`,
+  `/kick`, and `/rcon` commands, event templates, and a rate-limited two-way chat relay.
 - **Invites & client modpacks**: a paste-ready invite block plus a generated client `.mrpack` with
   the server pre-added to the in-game server list.
 - **Pick-mods-first solver**: choose the mods you want; the solver intersects Modrinth metadata to
@@ -394,6 +396,23 @@ quota. Optional strict mode gracefully stops a runaway server past its quota.
 API keys and RCON passwords are encrypted with AES-256-GCM, using a key derived from `SESSION_SECRET`.
 Blueprints never contain secrets. The panel refuses to set footgun env vars (`REMOVE_OLD_MODS`,
 `LOAD_ENV_FROM_*`).
+
+The Discord bot token uses the same encrypted store under the `discord-bot` provider. Guild, role,
+and command-permission settings are panel-global; channel bindings and event templates are per server
+and are configured from each server's **Integrations** tab. Bot mutations require an admin account.
+
+### Discord bot setup
+
+1. In the Discord Developer Portal, create an application and add a bot. Copy the bot token, then
+   enable the **Server Members Intent** and **Message Content Intent** under *Privileged Gateway Intents*.
+2. Invite the bot with the generated URL in **Server Settings → Integrations**. Use the `bot` and
+   `applications.commands` scopes and grant only the channel permissions it needs (view channel,
+   send messages, embed links, read message history, and use slash commands).
+3. Copy the guild, admin-role, moderator-role, and channel snowflake IDs (enable Developer Mode in
+   Discord first). Paste the token and IDs into any server's **Integrations → Discord bot** card.
+4. Save the global setup, verify the token, then enable a channel binding for each server. A blank
+   relay channel reuses the command/notification channel. The bot registers commands in the selected
+   guild; changing the token or guild reconnects it automatically.
 
 ### Password recovery
 

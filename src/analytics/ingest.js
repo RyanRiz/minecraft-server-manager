@@ -6,6 +6,7 @@
 // player_sessions.
 
 const db = require('../db');
+const eventBus = require('../events');
 const serversService = require('../services/servers');
 const { followLogs, fetchLogs } = require('../docker/logs');
 const { classify } = require('./logClassifier');
@@ -78,7 +79,7 @@ function closeAllSessions(serverId, ts = new Date().toISOString()) {
  * within DEDUPE_WINDOW_MS of an identical-type event for the same player.
  * @returns {boolean} true when a row was inserted
  */
-function insertEvent(serverId, evt, ts, raw, { sessions = true } = {}) {
+function insertEvent(serverId, evt, ts, raw, { sessions = true, emit = true } = {}) {
   if (evt.type === 'join' || evt.type === 'leave') {
     const prev = db.get(
       'SELECT ts, type, target FROM player_events WHERE server_id = ? AND player = ? ORDER BY id DESC LIMIT 1',
@@ -99,6 +100,17 @@ function insertEvent(serverId, evt, ts, raw, { sessions = true } = {}) {
     evt.message,
     raw
   );
+  if (emit) {
+    eventBus.publishPlayerEvent({
+      serverId,
+      ts,
+      type: evt.type,
+      player: evt.player,
+      target: evt.target,
+      message: evt.message,
+      raw,
+    });
+  }
   if (sessions) {
     if (evt.type === 'join') openSession(serverId, evt.player, ts);
     else if (evt.type === 'leave') closeSession(serverId, evt.player, ts);
@@ -214,7 +226,7 @@ async function backfillFromLogs(serverId, { tail = 5000 } = {}) {
     const ts = dockerTs || buildTs(evt.time, now);
     if (newest && ts < newest.ts) continue;
     if (db.get('SELECT 1 FROM player_events WHERE server_id = ? AND ts = ? AND raw = ?', serverId, ts, line)) continue;
-    if (insertEvent(serverId, evt, ts, line, { sessions: false })) inserted++;
+    if (insertEvent(serverId, evt, ts, line, { sessions: false, emit: false })) inserted++;
   }
   return { inserted };
 }

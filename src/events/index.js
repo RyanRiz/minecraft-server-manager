@@ -9,6 +9,29 @@ const { nanoid } = require('nanoid');
 const db = require('../db');
 const { dataPath } = require('../storage/pathGuard');
 
+const panelListeners = new Set();
+const playerListeners = new Set();
+
+function onEvent(listener) {
+  panelListeners.add(listener);
+  return () => panelListeners.delete(listener);
+}
+
+function onPlayerEvent(listener) {
+  playerListeners.add(listener);
+  return () => playerListeners.delete(listener);
+}
+
+function publishPlayerEvent(event) {
+  for (const listener of playerListeners) {
+    try {
+      Promise.resolve(listener(event)).catch((err) => console.warn('[events] player listener failed:', err.message));
+    } catch (err) {
+      console.warn('[events] player listener failed:', err.message);
+    }
+  }
+}
+
 /**
  * Record an event.
  * @param {object} e
@@ -41,7 +64,16 @@ function recordEvent({ serverId = null, actor = 'system', type, summary, details
     JSON.stringify(details),
     excerptRel
   );
-  return Number(result.lastInsertRowid);
+  const id = Number(result.lastInsertRowid);
+  const event = { id, server_id: serverId, actor, type, summary, details, log_excerpt_path: excerptRel };
+  for (const listener of panelListeners) {
+    try {
+      Promise.resolve(listener(event)).catch((err) => console.warn('[events] listener failed:', err.message));
+    } catch (err) {
+      console.warn('[events] listener failed:', err.message);
+    }
+  }
+  return id;
 }
 
 function listEvents({ serverId = null, type = null, limit = 50, offset = 0 } = {}) {
@@ -153,4 +185,4 @@ function pruneEvents(days, { actor = 'system' } = {}) {
   return { removed: rows.length };
 }
 
-module.exports = { recordEvent, listEvents, getEvent, readExcerpt, exportEvents, pruneEvents };
+module.exports = { recordEvent, listEvents, getEvent, readExcerpt, exportEvents, pruneEvents, onEvent, onPlayerEvent, publishPlayerEvent };

@@ -15,7 +15,10 @@
 # container-local ones.
 services:
   panel:
-    image: ghcr.io/anefzaoui/minecraft-server-manager:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: minecraft-server-manager:local
     container_name: minecraft-server-manager
     restart: unless-stopped
     ports:

@@ -1,5 +1,88 @@
 <div class="grid gap-4 lg:grid-cols-2" id="ig-root" data-server-id="{{server.id}}" data-invite="{{json integrations.invite}}">
 
+  <div class="card p-4 lg:col-span-2" id="ig-bot-root" data-server-id="{{server.id}}" data-admin="{{#if (eq user.role 'admin')}}1{{else}}0{{/if}}">
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h3 class="flex items-center gap-2 font-semibold">{{{icon 'bot' 'size-4 text-link'}}} Discord bot</h3>
+        <p class="mt-1 text-xs text-ink-faint">One panel-wide bot. This server owns the channel binding; global credentials and command roles are shared by every server.</p>
+      </div>
+      <span class="badge {{#if integrations.discordBot.bot.running}}badge-ok{{else}}badge-muted{{/if}}" data-bot-status>
+        {{#if integrations.discordBot.bot.running}}Connected{{else}}Stopped{{/if}}
+      </span>
+    </div>
+
+    <div class="grid gap-4 xl:grid-cols-3">
+      <div class="space-y-3">
+        <h4 class="text-sm font-semibold">Global bot setup</h4>
+        <div>
+          <label class="label" for="ig-bot-token">Bot token</label>
+          <input class="input font-mono text-xs" type="password" id="ig-bot-token" autocomplete="off" placeholder="Paste a new token, or leave blank to keep it" {{#unless (eq user.role 'admin')}}disabled{{/unless}}>
+          {{#if integrations.discordBot.bot.hasToken}}<p class="help">Stored: <code class="rounded bg-inset px-1 font-mono">{{integrations.discordBot.bot.tokenMasked}}</code></p>{{else}}<p class="help">Stored encrypted; never returned in full.</p>{{/if}}
+        </div>
+        <div>
+          <label class="label" for="ig-bot-guild">Guild ID</label>
+          <input class="input font-mono text-xs" id="ig-bot-guild" value="{{integrations.discordBot.bot.guildId}}" maxlength="21" {{unless (eq user.role 'admin') 'disabled'}}>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="label" for="ig-bot-admin-role">Admin role ID</label><input class="input font-mono text-xs" id="ig-bot-admin-role" value="{{integrations.discordBot.bot.adminRoleId}}" maxlength="21" {{unless (eq user.role 'admin') 'disabled'}}></div>
+          <div><label class="label" for="ig-bot-mod-role">Moderator role ID</label><input class="input font-mono text-xs" id="ig-bot-mod-role" value="{{integrations.discordBot.bot.modRoleId}}" maxlength="21" {{unless (eq user.role 'admin') 'disabled'}}></div>
+        </div>
+        <label class="flex items-center justify-between gap-3 text-sm"><span>Start bot automatically with the panel</span><span class="msm-toggle"><input type="checkbox" id="ig-bot-autostart" {{#if integrations.discordBot.bot.autoStart}}checked{{/if}} {{unless (eq user.role 'admin') 'disabled'}}><span></span></span></label>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn" id="ig-bot-verify" {{unless (eq user.role 'admin') 'disabled'}}>Verify token</button>
+          <button class="btn btn-primary" id="ig-bot-save-global" {{unless (eq user.role 'admin') 'disabled'}}>Save global setup</button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h4 class="text-sm font-semibold">This server's channel binding</h4>
+        <label class="flex items-center justify-between gap-3 text-sm"><span>Enable bot for this server</span><span class="msm-toggle"><input type="checkbox" id="ig-bot-enabled" {{#if integrations.discordBot.binding.enabled}}checked{{/if}} {{unless (eq user.role 'admin') 'disabled'}}><span></span></span></label>
+        <div><label class="label" for="ig-bot-channel">Command / notification channel ID</label><input class="input font-mono text-xs" id="ig-bot-channel" value="{{integrations.discordBot.binding.channelId}}" maxlength="21" {{unless (eq user.role 'admin') 'disabled'}}></div>
+        <label class="flex items-center justify-between gap-3 text-sm"><span>Enable two-way chat relay</span><span class="msm-toggle"><input type="checkbox" id="ig-bot-relay-enabled" {{#if integrations.discordBot.binding.relayEnabled}}checked{{/if}} {{unless (eq user.role 'admin') 'disabled'}}><span></span></span></label>
+        <div><label class="label" for="ig-bot-relay-channel">Optional relay channel ID</label><input class="input font-mono text-xs" id="ig-bot-relay-channel" value="{{integrations.discordBot.binding.relayChannelId}}" maxlength="21" placeholder="Blank = use command channel" {{unless (eq user.role 'admin') 'disabled'}}></div>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn btn-primary" id="ig-bot-save-binding" {{unless (eq user.role 'admin') 'disabled'}}>Save binding</button>
+          <button class="btn" id="ig-bot-test" {{unless (eq user.role 'admin') 'disabled'}}>Send test</button>
+          <button class="btn" id="ig-bot-start" {{unless (eq user.role 'admin') 'disabled'}}>Start bot</button>
+          <button class="btn" id="ig-bot-stop" {{unless (eq user.role 'admin') 'disabled'}}>Stop bot</button>
+          <button class="btn btn-danger" id="ig-bot-reset" {{unless (eq user.role 'admin') 'disabled'}}>Reset all bot config</button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h4 class="text-sm font-semibold">Global command permissions</h4>
+        <p class="help">These tiers apply to every server and are enforced inside Discord.</p>
+        <div class="grid grid-cols-2 gap-2 text-xs" data-bot-permissions>
+          <label>Status <select class="input" data-bot-permission="status" {{unless (eq user.role 'admin') 'disabled'}}><option value="everyone">everyone</option><option value="moderator">moderator</option><option value="admin">admin</option></select></label>
+          <label>Players <select class="input" data-bot-permission="players" {{unless (eq user.role 'admin') 'disabled'}}><option value="everyone">everyone</option><option value="moderator">moderator</option><option value="admin">admin</option></select></label>
+          <label>Save <select class="input" data-bot-permission="save" {{unless (eq user.role 'admin') 'disabled'}}><option value="everyone">everyone</option><option value="moderator">moderator</option><option value="admin">admin</option></select></label>
+          <label>Broadcast <select class="input" data-bot-permission="broadcast" {{unless (eq user.role 'admin') 'disabled'}}><option value="everyone">everyone</option><option value="moderator">moderator</option><option value="admin">admin</option></select></label>
+          <label>Kick <select class="input" data-bot-permission="kick" {{unless (eq user.role 'admin') 'disabled'}}><option value="everyone">everyone</option><option value="moderator">moderator</option><option value="admin">admin</option></select></label>
+          <label>Start <select class="input" data-bot-permission="start" {{unless (eq user.role 'admin') 'disabled'}}><option value="everyone">everyone</option><option value="moderator">moderator</option><option value="admin">admin</option></select></label>
+          <label>Stop <select class="input" data-bot-permission="stop" {{unless (eq user.role 'admin') 'disabled'}}><option value="everyone">everyone</option><option value="moderator">moderator</option><option value="admin">admin</option></select></label>
+          <label>Restart <select class="input" data-bot-permission="restart" {{unless (eq user.role 'admin') 'disabled'}}><option value="everyone">everyone</option><option value="moderator">moderator</option><option value="admin">admin</option></select></label>
+          <label>RCON <select class="input" data-bot-permission="rcon" {{unless (eq user.role 'admin') 'disabled'}}><option value="everyone">everyone</option><option value="moderator">moderator</option><option value="admin">admin</option></select></label>
+        </div>
+        <button class="btn btn-primary" id="ig-bot-save-permissions" {{unless (eq user.role 'admin') 'disabled'}}>Save permissions</button>
+      </div>
+    </div>
+
+    <details class="mt-5 rounded-md border border-line bg-raised p-3" {{#if integrations.discordBot.binding.enabled}}open{{/if}}>
+      <summary class="cursor-pointer text-sm font-semibold">Event notification templates</summary>
+      <p class="help mt-2">Templates are per server. Variables: <code>{server}</code>, <code>{player}</code>, <code>{minutes}</code>, <code>{message}</code>, and <code>{killer}</code>. Mentions are always disabled.</p>
+      <div class="mt-3 grid gap-3 lg:grid-cols-2">
+        <label class="text-xs"><span class="flex items-center justify-between gap-2"><span>Server start</span><span class="msm-toggle"><input type="checkbox" data-bot-event="serverStart" {{#if integrations.discordBot.binding.events.serverStart.enabled}}checked{{/if}} {{unless (eq user.role 'admin') 'disabled'}}><span></span></span></span><input class="input mt-1 text-xs" data-bot-template="serverStart" value="{{integrations.discordBot.binding.events.serverStart.template}}" {{unless (eq user.role 'admin') 'disabled'}}></label>
+        <label class="text-xs"><span class="flex items-center justify-between gap-2"><span>Server stop</span><span class="msm-toggle"><input type="checkbox" data-bot-event="serverStop" {{#if integrations.discordBot.binding.events.serverStop.enabled}}checked{{/if}} {{unless (eq user.role 'admin') 'disabled'}}><span></span></span></span><input class="input mt-1 text-xs" data-bot-template="serverStop" value="{{integrations.discordBot.binding.events.serverStop.template}}" {{unless (eq user.role 'admin') 'disabled'}}></label>
+        <label class="text-xs"><span class="flex items-center justify-between gap-2"><span>Player join</span><span class="msm-toggle"><input type="checkbox" data-bot-event="playerJoin" {{#if integrations.discordBot.binding.events.playerJoin.enabled}}checked{{/if}} {{unless (eq user.role 'admin') 'disabled'}}><span></span></span></span><input class="input mt-1 text-xs" data-bot-template="playerJoin" value="{{integrations.discordBot.binding.events.playerJoin.template}}" {{unless (eq user.role 'admin') 'disabled'}}></label>
+        <label class="text-xs"><span class="flex items-center justify-between gap-2"><span>Player leave</span><span class="msm-toggle"><input type="checkbox" data-bot-event="playerLeave" {{#if integrations.discordBot.binding.events.playerLeave.enabled}}checked{{/if}} {{unless (eq user.role 'admin') 'disabled'}}><span></span></span></span><input class="input mt-1 text-xs" data-bot-template="playerLeave" value="{{integrations.discordBot.binding.events.playerLeave.template}}" {{unless (eq user.role 'admin') 'disabled'}}></label>
+        <label class="text-xs"><span class="flex items-center justify-between gap-2"><span>Player death</span><span class="msm-toggle"><input type="checkbox" data-bot-event="playerDeath" {{#if integrations.discordBot.binding.events.playerDeath.enabled}}checked{{/if}} {{unless (eq user.role 'admin') 'disabled'}}><span></span></span></span><input class="input mt-1 text-xs" data-bot-template="playerDeath" value="{{integrations.discordBot.binding.events.playerDeath.template}}" {{unless (eq user.role 'admin') 'disabled'}}></label>
+        <label class="text-xs"><span class="flex items-center justify-between gap-2"><span>Restart warning</span><span class="msm-toggle"><input type="checkbox" data-bot-event="scheduledRestart" {{#if integrations.discordBot.binding.events.scheduledRestart.enabled}}checked{{/if}} {{unless (eq user.role 'admin') 'disabled'}}><span></span></span></span><input class="input mt-1 text-xs" data-bot-template="scheduledRestart" value="{{integrations.discordBot.binding.events.scheduledRestart.template}}" {{unless (eq user.role 'admin') 'disabled'}}></label>
+        <label class="text-xs"><span class="flex items-center justify-between gap-2"><span>Backup complete</span><span class="msm-toggle"><input type="checkbox" data-bot-event="backupComplete" {{#if integrations.discordBot.binding.events.backupComplete.enabled}}checked{{/if}} {{unless (eq user.role 'admin') 'disabled'}}><span></span></span></span><input class="input mt-1 text-xs" data-bot-template="backupComplete" value="{{integrations.discordBot.binding.events.backupComplete.template}}" {{unless (eq user.role 'admin') 'disabled'}}></label>
+      </div>
+      <button class="btn btn-primary mt-3" id="ig-bot-save-events" {{unless (eq user.role 'admin') 'disabled'}}>Save event templates</button>
+    </details>
+  </div>
+
   <div class="card p-4">
     <div class="mb-4 flex items-center justify-between gap-3">
       <h3 class="flex items-center gap-2 font-semibold">{{{icon 'webhook' 'size-4 text-link'}}} Discord notifications</h3>
@@ -129,3 +212,4 @@
 </div>
 
 <script type="module" src="/js/pages/integrations.js"></script>
+<script type="module" src="/js/pages/discord-bot.js"></script>

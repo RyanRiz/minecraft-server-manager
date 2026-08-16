@@ -37,6 +37,7 @@
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.2",
     "croner": "^9.0.0",
+    "discord.js": "^14.26.4",
     "dockerode": "^4.0.5",
     "dotenv": "^16.5.0",
     "express": "^4.21.2",
@@ -50,6 +51,7 @@
     "prismarine-nbt": "^2.8.0",
     "sanitize-html": "^2.14.0",
     "tar": "^7.4.3",
+    "undici": "^8.10.0",
     "ws": "^8.18.1",
     "yauzl": "^3.2.0",
     "zod": "^3.24.2"

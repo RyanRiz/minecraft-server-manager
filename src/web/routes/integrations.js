@@ -9,10 +9,12 @@ const express = require('express');
 const fs = require('node:fs');
 const { z } = require('zod');
 const discord = require('../../integrations/discord');
+const discordBot = require('../../integrations/discordBot');
 const invites = require('../../integrations/invites');
 const statusPage = require('../../integrations/statusPage');
 const serversService = require('../../services/servers');
 const { recordEvent } = require('../../events');
+const { requireRole } = require('../middleware/auth');
 
 const router = express.Router({ mergeParams: true });
 
@@ -36,9 +38,133 @@ router.get(
     res.json({
       ok: true,
       discord: discord.getConfig(server.id),
+      discordBot: discordBot.getConfig(server.id),
       statusPage: statusPage.getStatusPage(server.id),
       invite: await invites.inviteInfo(server.id),
     });
+  })
+);
+
+// ---------------------------------------------------------------------------
+// Discord gateway bot. Credentials and command permissions are panel-global;
+// the channel binding and event templates belong to this server.
+
+router.get(
+  '/discord-bot',
+  asyncHandler((req, res) => {
+    const server = mustGet(req);
+    res.json(discordBot.getConfig(server.id));
+  })
+);
+
+const discordBotGlobalSchema = z.object({
+  token: z.string().trim().max(200).optional(),
+  guildId: z.string().trim().regex(/^\d{15,21}$/),
+  adminRoleId: z.string().trim().regex(/^\d{15,21}$/).optional().or(z.literal('')),
+  modRoleId: z.string().trim().regex(/^\d{15,21}$/).optional().or(z.literal('')),
+  autoStart: z.boolean().optional(),
+});
+
+router.put(
+  '/discord-bot/global',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    const server = mustGet(req);
+    const input = discordBotGlobalSchema.parse(req.body);
+    const previousRunning = discordBot.bot.isRunning;
+    const result = discordBot.updateGlobal({ ...input, token: input.token || 'KEEP_EXISTING', actor: req.user.username });
+    if (previousRunning && result.credentialChanged) {
+      await discordBot.stop();
+      await discordBot.start();
+    }
+    recordEvent({ serverId: server.id, actor: req.user.username, type: 'integration-changed', summary: 'Discord bot global configuration updated' });
+    res.json(discordBot.getConfig(server.id));
+  })
+);
+
+const discordBotBindingSchema = z.object({
+  enabled: z.boolean(),
+  channelId: z.string().trim().max(30).optional(),
+  relayEnabled: z.boolean().optional(),
+  relayChannelId: z.string().trim().max(30).optional(),
+  events: z.record(z.object({ enabled: z.boolean().optional(), template: z.string().max(500).optional() })).optional(),
+});
+
+router.put(
+  '/discord-bot/binding',
+  requireRole('admin'),
+  asyncHandler((req, res) => {
+    const server = mustGet(req);
+    const input = discordBotBindingSchema.parse(req.body);
+    discordBot.setBinding(server.id, input);
+    recordEvent({ serverId: server.id, actor: req.user.username, type: 'integration-changed', summary: `Discord bot binding ${input.enabled ? 'enabled' : 'disabled'}` });
+    res.json(discordBot.getConfig(server.id));
+  })
+);
+
+router.put(
+  '/discord-bot/permissions',
+  requireRole('admin'),
+  asyncHandler((req, res) => {
+    const server = mustGet(req);
+    const input = z.object({ permissions: z.record(z.enum(['everyone', 'moderator', 'admin'])) }).parse(req.body);
+    discordBot.updatePermissions(input.permissions, req.user.username);
+    res.json(discordBot.getConfig(server.id));
+  })
+);
+
+router.post(
+  '/discord-bot/verify-token',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    mustGet(req);
+    const input = z.object({ token: z.string().trim().min(20).max(200) }).parse(req.body);
+    res.json({ ok: true, ...(await discordBot.verifyToken(input.token)) });
+  })
+);
+
+router.post(
+  '/discord-bot/start',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    const server = mustGet(req);
+    const started = await discordBot.start();
+    if (!started) return res.status(400).json({ ok: false, error: 'Discord bot is not configured or failed to connect' });
+    recordEvent({ serverId: server.id, actor: req.user.username, type: 'discord-bot-started', summary: 'Discord bot started' });
+    res.json(discordBot.getConfig(server.id));
+  })
+);
+
+router.post(
+  '/discord-bot/stop',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    const server = mustGet(req);
+    await discordBot.stop();
+    recordEvent({ serverId: server.id, actor: req.user.username, type: 'discord-bot-stopped', summary: 'Discord bot stopped' });
+    res.json(discordBot.getConfig(server.id));
+  })
+);
+
+router.post(
+  '/discord-bot/test-message',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    const server = mustGet(req);
+    const sent = await discordBot.testMessage(server.id);
+    if (!sent) return res.status(502).json({ ok: false, error: 'Discord bot is offline or the bound channel rejected the message' });
+    res.json({ ok: true });
+  })
+);
+
+router.post(
+  '/discord-bot/reset',
+  requireRole('admin'),
+  asyncHandler(async (req, res) => {
+    const server = mustGet(req);
+    await discordBot.reset(req.user.username);
+    recordEvent({ serverId: server.id, actor: req.user.username, type: 'discord-bot-reset', summary: 'Discord bot configuration reset globally' });
+    res.json(discordBot.getConfig(server.id));
   })
 );
 

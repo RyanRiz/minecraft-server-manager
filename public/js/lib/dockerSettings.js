@@ -39,7 +39,10 @@ export function initDockerSettings(ids) {
           networkSel.appendChild(opt);
         }
         if (pendingNetwork != null) networkSel.value = pendingNetwork;
-        networkSel.dispatchEvent(new Event('change', { bubbles: true })); // sync the styled trigger
+        // This only refreshes the custom-select label after async options load;
+        // it is not a user edit. Consumers with unsaved-change tracking can
+        // use the detail marker to avoid flagging a freshly opened form dirty.
+        networkSel.dispatchEvent(new CustomEvent('change', { bubbles: true, detail: { msmInternalSync: true } }));
       })
       .catch(() => {}); // Docker unreachable — leave just the default option
 

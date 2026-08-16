@@ -107,6 +107,17 @@ function createApp() {
         and: (a, b) => a && b,
         or: (a, b) => a || b,
         not: (a) => !a,
+        // Supports both Handlebars block syntax and a compact attribute form:
+        // {{unless value 'disabled'}}. The latter keeps server-rendered forms
+        // readable without relying on unsafe string concatenation in templates.
+        unless: function unless(value, fallback, options) {
+          if (fallback && typeof fallback === 'object' && fallback.fn) {
+            options = fallback;
+            fallback = '';
+          }
+          if (options && options.fn) return !value ? options.fn(this) : options.inverse(this);
+          return !value ? fallback || '' : '';
+        },
         json: jsonForScript,
         urlq: (s) => encodeURIComponent(s ?? ''),
         iconSrc,

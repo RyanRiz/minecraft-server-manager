@@ -10,6 +10,11 @@ const path = require('node:path');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'msm-test-'));
 process.env.DATA_DIR = dir;
+// A developer's Compose `.env` normally sets DATA_DIR_HOST, which makes the
+// runtime use host.docker.internal for map proxying. Tests run on the host and
+// must stay self-contained, so keep dotenv from importing those local values.
+process.env.DATA_DIR_HOST = '';
+process.env.MAP_PROXY_HOST = '';
 if (!process.env.SESSION_SECRET) {
   process.env.SESSION_SECRET = 'test-session-secret-0123456789abcdef';
 }

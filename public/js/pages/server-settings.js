@@ -42,7 +42,11 @@ function init(serverId) {
   // ---- dirty tracking: Save always works, but Discard/leave now warn instead
   // of silently dropping edits ----
   let dirty = false;
-  const markDirty = () => {
+  const markDirty = (event) => {
+    // Docker networks arrive asynchronously and trigger a synthetic `change`
+    // merely to redraw the enhanced select. It must not make a newly opened
+    // Settings page look edited or cause a leave-site prompt.
+    if (event?.detail?.msmInternalSync) return;
     dirty = true;
   };
   root.addEventListener('input', markDirty);

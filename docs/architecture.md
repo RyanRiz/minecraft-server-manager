@@ -55,6 +55,10 @@ Cross-cutting:
   from it, so exposing a new setting is a data change, not new UI plumbing.
 - **`events/`** — `recordEvent()` is the one entry point for the history log; lifecycle events also
   capture container-log excerpts to `data/logs/<id>/events/`.
+- **`integrations/discordBot.js`** — one panel-wide Discord gateway client with guild slash commands,
+  global role tiers, per-server channel bindings, live event notifications, and a bounded two-way
+  Minecraft chat relay. The bot token is encrypted as an API key; bindings remain in the existing
+  per-server `integrations` table. The older Discord webhook integration remains independent.
 - **`ws/`** — authenticated console + stats WebSockets (session cookie verified on upgrade).
 
 ## Key domain behaviors
@@ -72,6 +76,9 @@ Cross-cutting:
   caches per-directory sizes and disk-growing operations are gated on them.
 - **Secrets** (RCON passwords, API keys) are encrypted at rest with AES-256-GCM using a key derived
   from `SESSION_SECRET`. Blueprints strip all secrets on export.
+- **Discord channel routing**: slash commands are accepted only in a server's bound command channel.
+  An optional relay channel receives game chat and accepts Discord-to-game chat. Active channel IDs
+  are unique across server bindings so one Discord message can never target multiple Minecraft servers.
 
 ## Data & wire formats
 

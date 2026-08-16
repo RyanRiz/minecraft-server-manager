@@ -364,6 +364,7 @@ router.get(
     } else if (tab === 'integrations') {
       context.integrations = {
         discord: require('../../integrations/discord').getConfig(row.id),
+        discordBot: require('../../integrations/discordBot').getConfig(row.id),
         statusPage: require('../../integrations/statusPage').getStatusPage(row.id),
         invite: await require('../../integrations/invites')
           .inviteInfo(row.id)

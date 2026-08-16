@@ -1,0 +1,5 @@
+<!-- Minecraft Server Manager favicon — based on the panel's green pickaxe mark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="12" fill="#2f8b21"/>
+  <path d="M38 35 16 57a4 4 0 0 1-6-6l22-22M43.2 11.8A34.5 34.5 0 0 0 17 7.5c-3.7.9-2.9 5.7.7 6.8a52.7 52.7 0 0 1 15.3 8M43.3 33a52.7 52.7 0 0 1 8 15.3c1.2 3.6 5.9 4.4 6.8.7a34.5 34.5 0 0 0-4.3-26.2M49.5 10.5a4 4 0 0 0-5.7 0L30 24.3a4 4 0 0 0 0 5.7l6 6a4 4 0 0 0 5.7 0l13.8-13.8a4 4 0 0 0 0-5.7z" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

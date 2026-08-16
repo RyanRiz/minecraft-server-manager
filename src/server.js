@@ -76,6 +76,7 @@ function startBackgroundServices(httpServer) {
   require('./crashes').startCrashWatcher({});
   require('./services/scheduler').startScheduler();
   require('./integrations/discord').startEventBridge();
+  require('./integrations/discordBot').autoStart().catch((err) => console.error('[boot] Discord bot start failed:', err.message));
   require('./services/inventory').startSnapshotWatcher();
 
   // Daily maintenance: prune old analytics timeline rows + closed sessions so the
