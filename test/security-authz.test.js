@@ -60,6 +60,28 @@ test('mods toggle rejects path traversal in the file param', async () => {
   assert.equal(r.status, 400);
 });
 
+test('bulk mod toggle applies every distinct filename and rejects unsafe input', async () => {
+  const changed = await app.req('POST', '/api/servers/srv_sec01/mods/bulk-toggle', {
+    cookie: adminCookie,
+    body: { files: ['first.jar', 'second.jar'], enabled: false },
+  });
+  assert.equal(changed.status, 200);
+  assert.equal(changed.json.changed, 2);
+  assert.equal(changed.json.instant, 2);
+
+  const unsafe = await app.req('POST', '/api/servers/srv_sec01/mods/bulk-toggle', {
+    cookie: adminCookie,
+    body: { files: ['safe.jar', '../../../panel.db'], enabled: false },
+  });
+  assert.equal(unsafe.status, 400);
+
+  const duplicate = await app.req('POST', '/api/servers/srv_sec01/mods/bulk-toggle', {
+    cookie: adminCookie,
+    body: { files: ['safe.jar', 'safe.jar'], enabled: false },
+  });
+  assert.equal(duplicate.status, 400);
+});
+
 test('mods delete rejects an encoded traversal in the :file param', async () => {
   const r = await app.req('DELETE', '/api/servers/srv_sec01/mods/..%2F..%2F..%2F.session-secret', {
     cookie: adminCookie,

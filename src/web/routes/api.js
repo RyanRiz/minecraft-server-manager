@@ -1129,6 +1129,32 @@ router.post(
   })
 );
 
+// Apply the same lifecycle/history semantics as the single-row toggle, but
+// serially: pack-managed toggles each update the server exclusion env, so
+// parallel writes could overwrite an earlier selected mod's change.
+router.post(
+  '/servers/:id/mods/bulk-toggle',
+  asyncHandler(async (req, res, next) => {
+    const { files, enabled } = z
+      .object({
+        files: z.array(z.string().min(1).max(200)).min(1).max(200),
+        enabled: z.boolean(),
+      })
+      .refine((value) => new Set(value.files).size === value.files.length, { message: 'Each content filename must be unique' })
+      .parse(req.body);
+    const results = [];
+    for (const file of files) {
+      results.push(await mods.setEnabled(req.params.id, file, enabled, { actor: req.user.username }));
+    }
+    res.json({
+      ok: true,
+      changed: results.length,
+      instant: results.filter((result) => result.applied === 'instant').length,
+      onRestart: results.filter((result) => result.applied === 'on-restart').length,
+    });
+  })
+);
+
 router.delete(
   '/servers/:id/mods/:file',
   asyncHandler(async (req, res, next) => {

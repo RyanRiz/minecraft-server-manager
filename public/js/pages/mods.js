@@ -32,12 +32,79 @@ function init(serverId, serverType, mcVersion, serverLoader) {
       const matches = (!q || hay.includes(q)) && (!src || row.dataset.source === src);
       row.classList.toggle('hidden', !matches);
     });
+    updateBulkControls();
   }
   filter?.addEventListener('input', refilter);
   source?.addEventListener('change', refilter);
 
+  // ---- Bulk enable / disable ----
+  const table = document.getElementById('mods-table');
+  const selectAll = document.getElementById('mods-select-all');
+  const bulkActions = document.getElementById('mods-bulk-actions');
+  const selectedCount = root.querySelector('[data-mods-selected-count]');
+
+  function selectableRows({ visibleOnly = false } = {}) {
+    return [...root.querySelectorAll('[data-mod-row]')].filter((row) => {
+      const checkbox = row.querySelector('[data-mod-select]');
+      return checkbox && !checkbox.disabled && (!visibleOnly || !row.classList.contains('hidden'));
+    });
+  }
+
+  function selectedRows() {
+    return selectableRows().filter((row) => row.querySelector('[data-mod-select]').checked);
+  }
+
+  function updateBulkControls() {
+    const selected = selectedRows();
+    const visible = selectableRows({ visibleOnly: true });
+    if (bulkActions) bulkActions.classList.toggle('hidden', selected.length === 0);
+    if (selectedCount) selectedCount.textContent = String(selected.length);
+    if (selectAll) {
+      selectAll.checked = visible.length > 0 && visible.every((row) => row.querySelector('[data-mod-select]').checked);
+      selectAll.indeterminate = visible.some((row) => row.querySelector('[data-mod-select]').checked) && !selectAll.checked;
+    }
+  }
+
+  table?.addEventListener('change', (event) => {
+    if (event.target.matches('[data-mod-select]')) updateBulkControls();
+  });
+  selectAll?.addEventListener('change', () => {
+    for (const row of selectableRows({ visibleOnly: true })) row.querySelector('[data-mod-select]').checked = selectAll.checked;
+    updateBulkControls();
+  });
+  document.getElementById('mods-bulk-clear')?.addEventListener('click', () => {
+    for (const row of selectedRows()) row.querySelector('[data-mod-select]').checked = false;
+    updateBulkControls();
+  });
+
+  async function bulkToggle(enabled, button) {
+    const rows = selectedRows();
+    if (!rows.length) return;
+    const files = rows.map((row) => row.dataset.file);
+    const packCount = rows.filter((row) => row.dataset.source === 'pack').length;
+    const verb = enabled ? 'Enable' : 'Disable';
+    const ok = await confirmDialog({
+      title: `${verb} ${files.length} selected mod${files.length === 1 ? '' : 's'}?`,
+      message: `${verb}s the selected mods.${packCount ? ` ${packCount} pack-managed mod${packCount === 1 ? '' : 's'} will apply on the next restart.` : ''}`,
+      confirmLabel: `${verb} selected`,
+      danger: !enabled,
+    });
+    if (!ok) return;
+    const result = await withBusy(button, `${enabled ? 'Enabling' : 'Disabling'}…`, () =>
+      post(`/api/servers/${serverId}/mods/bulk-toggle`, { files, enabled })
+    );
+    if (!result) return;
+    toast(
+      `${result.changed} mod${result.changed === 1 ? '' : 's'} ${enabled ? 'enabled' : 'disabled'}${result.onRestart ? `; ${result.onRestart} apply on the next restart.` : '.'}`
+    );
+    setTimeout(() => location.reload(), 650);
+  }
+
+  document.getElementById('mods-bulk-enable')?.addEventListener('click', (event) => bulkToggle(true, event.currentTarget));
+  document.getElementById('mods-bulk-disable')?.addEventListener('click', (event) => bulkToggle(false, event.currentTarget));
+
   // ---- Row actions ----
-  document.getElementById('mods-table')?.addEventListener('click', async (e) => {
+  table?.addEventListener('click', async (e) => {
     const row = e.target.closest('[data-mod-row]');
     if (!row) return;
     const file = row.dataset.file;

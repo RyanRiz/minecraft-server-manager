@@ -12,6 +12,13 @@
     </div>
   </div>
 
+  <div class="mb-4 hidden flex-wrap items-center gap-2 rounded-md border border-line bg-raised p-2.5" id="mods-bulk-actions" aria-live="polite">
+    <span class="text-sm text-ink-soft"><b data-mods-selected-count>0</b> selected</span>
+    <button class="btn btn-primary btn-sm" id="mods-bulk-enable">Enable selected</button>
+    <button class="btn btn-sm" id="mods-bulk-disable">Disable selected</button>
+    <button class="btn btn-ghost btn-sm" id="mods-bulk-clear">Clear</button>
+  </div>
+
   {{! Populated by JS when the pack has mods that need manual action (MODS_NEED_DOWNLOAD.txt). }}
   <div id="mods-pending" class="mb-4 hidden"></div>
 
@@ -27,11 +34,12 @@
   <div class="card overflow-x-auto">
     <table class="table-base" id="mods-table">
       <thead><tr>
-        <th>Mod</th><th>Source</th><th>Version</th><th class="text-right">Size</th><th>Status</th><th class="text-right">Actions</th>
+        <th class="w-10"><input type="checkbox" class="msm-check" id="mods-select-all" aria-label="Select all visible mods" data-tip="Select all visible mods"></th><th>Mod</th><th>Source</th><th>Version</th><th class="text-right">Size</th><th>Status</th><th class="text-right">Actions</th>
       </tr></thead>
       <tbody>
         {{#each mods}}
           <tr class="{{#unless enabled}}opacity-60{{/unless}}" data-mod-row data-file="{{file}}" data-name="{{name}}" data-source="{{source}}" data-enabled="{{enabled}}">
+            <td><input type="checkbox" class="msm-check" data-mod-select aria-label="Select {{name}}" {{#if missing}}disabled data-tip="Missing file cannot be toggled"{{/if}}></td>
             {{! w-full + max-w-0 so `truncate` actually engages — long mod file
                 names were widening the table into horizontal scroll. }}
             <td class="w-full max-w-0">
