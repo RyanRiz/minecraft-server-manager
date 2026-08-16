@@ -96,15 +96,20 @@ test('/status renders the detailed server embed without a website field', async 
     JSON.stringify({ MAX_PLAYERS: '30', MOTD: '§aWholesome Minecraft Server' }),
     'srv_bot01'
   );
+  let deferred = false;
   let reply;
   await discordBot.bot.commandStatus(
     {
-      reply: async (payload) => {
+      deferReply: async () => {
+        deferred = true;
+      },
+      editReply: async (payload) => {
         reply = payload;
       },
     },
     'srv_bot01'
   );
+  assert.equal(deferred, true);
   const embed = reply.embeds[0].toJSON();
   const fields = Object.fromEntries(embed.fields.map((field) => [field.name, field.value]));
   assert.equal(embed.title, 'Minecraft Server: Test Server');

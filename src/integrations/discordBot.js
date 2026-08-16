@@ -93,13 +93,18 @@ function plainMotd(value, fallback) {
   return motd ? motd.slice(0, 1024) : 'Not set';
 }
 
-function safeBody(value) {
+async function safeBody(value) {
   if (value == null) return null;
   if (typeof value === 'string') return value;
   if (types.isUint8Array(value)) return value;
   if (types.isArrayBuffer(value)) return new Uint8Array(value);
   if (value instanceof URLSearchParams) return value.toString();
   if (value instanceof DataView) return new Uint8Array(value.buffer);
+  // discord.js uses FormData for replies with file attachments. FormData is
+  // iterable as [name, value] tuples, so treating it as a stream makes
+  // Buffer.concat throw "list[0] must be a Buffer" on Node 24.
+  if (typeof Blob !== 'undefined' && value instanceof Blob) return new Uint8Array(await value.arrayBuffer());
+  if (typeof FormData !== 'undefined' && value instanceof FormData) return value;
   if (typeof value[Symbol.iterator] === 'function') return Buffer.concat([...value]);
   if (typeof value[Symbol.asyncIterator] === 'function') {
     return (async () => {
@@ -480,13 +485,22 @@ class DiscordBot {
         default: return interaction.reply({ content: 'Unknown command', flags: MessageFlags.Ephemeral });
       }
     } catch (error) {
+      console.warn(`[discord-bot] /${interaction.commandName} failed:`, publicError(error));
       const content = `❌ ${publicError(error)}`;
-      if (interaction.replied || interaction.deferred) return interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+      // A deferred interaction already has Discord's acknowledgement. Editing
+      // that response is more reliable than a second follow-up when a command
+      // (or an attachment upload) fails after the three-second deadline.
+      if (interaction.deferred) return interaction.editReply({ content, embeds: [], files: [] });
+      if (interaction.replied) return interaction.followUp({ content, flags: MessageFlags.Ephemeral });
       return interaction.reply({ content, flags: MessageFlags.Ephemeral });
     }
   }
 
   async commandStatus(interaction, serverId) {
+    // A status response can include a local thumbnail attachment. Acknowledge
+    // first so Discord never expires the slash-command interaction while the
+    // attachment is prepared or uploaded.
+    await interaction.deferReply();
     const server = servers.getServer(serverId);
     const live = require('../services/liveCache').get(serverId);
     const playerCount = live.players?.online ?? 0;
@@ -511,7 +525,7 @@ class DiscordBot {
       .setTimestamp();
     const icon = statusIconAttachment(server);
     if (icon) embed.setThumbnail(`attachment://${icon.name}`);
-    return interaction.reply({ embeds: [embed], ...(icon ? { files: [icon] } : {}) });
+    return interaction.editReply({ embeds: [embed], ...(icon ? { files: [icon] } : {}) });
   }
 
   async commandPlayers(interaction, serverId) {
