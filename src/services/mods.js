@@ -24,6 +24,13 @@ const serversService = require('./servers');
 const indexer = require('../storage/indexer');
 
 const PLUGIN_TYPES = new Set(['PAPER', 'PURPUR', 'PUFFERFISH', 'LEAF', 'FOLIA', 'SPIGOT', 'BUKKIT', 'CANYON']);
+const CACHED_ICON_FILE = /^lib_[\w-]+\.(?:png|jpe?g|webp|gif|svg)$/i;
+
+function cachedIconUrl(lib) {
+  if (!lib?.icon_rel_path) return null;
+  const file = path.basename(lib.icon_rel_path);
+  return CACHED_ICON_FILE.test(file) ? `/api/icons/mods/${encodeURIComponent(file)}` : null;
+}
 
 // Content filenames must be bare names inside the server's content dir. dataPath()
 // only guarantees containment within DATA_DIR, so a `file` like "../../../panel.db"
@@ -111,8 +118,7 @@ async function listContent(serverId) {
       enabled: !isDisabled,
       disabledVia: row && row.managed_by === 'pack' && !isDisabled ? null : undefined,
       sharedWith: lib ? library.usageCount(lib.id) : null,
-      iconUrl:
-        lib && lib.icon_rel_path ? `/${lib.icon_rel_path}` : (lib && lib.icon_url) || (row && row.icon_url) || null,
+      iconUrl: cachedIconUrl(lib) || (lib && lib.icon_url) || (row && row.icon_url) || null,
       updateAvailable: updateFor(row),
     });
   }

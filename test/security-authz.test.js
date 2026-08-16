@@ -10,8 +10,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const app = require('./helpers/app');
 const authService = require('../src/services/auth');
+const { dataPath } = require('../src/storage/pathGuard');
 
 let adminCookie;
 let viewerCookie;
@@ -50,6 +52,15 @@ test('viewer cannot read server files (403); admin passes the gate', async () =>
 
   const asAdmin = await app.req('GET', '/api/servers/srv_sec01/files/list', { cookie: adminCookie });
   assert.notEqual(asAdmin.status, 403); // gate passed (200 or a benign 404, but never forbidden)
+});
+
+test('cached mod icons are served from the protected data library', async () => {
+  const dir = dataPath('library', 'icons', 'mods');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(`${dir}/lib_test-icon.webp`, Buffer.from('RIFF....WEBP'));
+  const r = await app.req('GET', '/api/icons/mods/lib_test-icon.webp', { cookie: viewerCookie });
+  assert.equal(r.status, 200);
+  assert.match(r.text, /RIFF/);
 });
 
 test('mods toggle rejects path traversal in the file param', async () => {

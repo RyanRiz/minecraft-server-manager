@@ -1296,6 +1296,25 @@ router.get(
 const ICON_MAX_BYTES = 512 * 1024;
 const ICON_EXTS = { 'image/png': '.png', 'image/svg+xml': '.svg', 'image/jpeg': '.jpg' };
 const iconUpload = multer({ dest: dataPath('tmp'), limits: { fileSize: ICON_MAX_BYTES, files: 1 } });
+const cachedModIconSchema = z
+  .string()
+  .regex(/^lib_[\w-]+\.(?:png|jpe?g|webp|gif|svg)$/i, 'Invalid cached mod icon file');
+
+// Cached platform icons live under DATA_DIR, which is deliberately not a
+// public static directory. Expose only the generated library-icon names.
+router.get(
+  '/icons/mods/:file',
+  asyncHandler((req, res, next) => {
+    const file = cachedModIconSchema.parse(req.params.file);
+    const abs = dataPath('library', 'icons', 'mods', file);
+    if (!fs.existsSync(abs)) throw Object.assign(new Error('Mod icon not found'), { status: 404 });
+    if (/\.svg$/i.test(file)) {
+      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    }
+    res.sendFile(abs);
+  })
+);
 
 // multipart field: 'icon'. Stores data/library/icons/custom/<serverId><ext>
 // and sets servers.icon = 'custom:<filename>' (render via /api/icons/custom/<file>).
