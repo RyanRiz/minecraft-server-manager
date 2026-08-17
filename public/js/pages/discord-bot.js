@@ -1,6 +1,7 @@
 // Discord gateway bot controls for one server's Integrations tab.
 import { toast } from '../lib/toast.js';
 import { withBusy } from '../lib/loading.js';
+import { confirmDialog } from '../lib/confirm.js';
 
 const root = document.getElementById('ig-bot-root');
 if (root) init(root);
@@ -169,11 +170,20 @@ function init(root) {
     toast('Test message sent to the bound channel.');
   }));
 
-  el('ig-bot-reset')?.addEventListener('click', (event) => action(event.currentTarget, 'Resetting…', async () => {
-    if (!window.confirm('Reset the global Discord bot and disable every server binding? Existing webhooks are kept.')) return;
+  el('ig-bot-reset')?.addEventListener('click', async (event) => {
+    const confirmed = await confirmDialog({
+      title: 'Reset Discord bot configuration?',
+      message: 'This stops the global Discord bot and disables its binding on every server.',
+      detail: 'The bot token, Guild ID, roles, command permissions, and bot-specific server settings will be removed. Existing Discord webhooks are kept.',
+      confirmLabel: 'Reset configuration',
+      danger: true,
+    });
+    if (!confirmed) return;
+    action(event.currentTarget, 'Resetting…', async () => {
     render(await request('/reset', 'POST', {}));
     toast('Global Discord bot configuration reset.');
-  }));
+    });
+  });
 
   setInterval(async () => {
     if (document.visibilityState === 'hidden') return;
