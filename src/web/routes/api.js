@@ -973,10 +973,12 @@ router.post(
         underlined: z.coerce.boolean().optional(),
         strikethrough: z.coerce.boolean().optional(),
         obfuscated: z.coerce.boolean().optional(),
-      })
+    })
       .parse(req.body);
     const result = await chat.sendChat(req.params.id, { ...body, actor: req.user.username });
-    res.status(201).json({ ok: true, ...result });
+    // An empty server is a normal chat state. Keep it a successful API reply
+    // so the browser can present a notice instead of surfacing a 502.
+    res.status(result.delivered ? 201 : 200).json({ ok: true, ...result });
   })
 );
 

@@ -245,6 +245,10 @@ function init(serverId) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) throw new Error(data.error || 'Message failed to send');
+      if (!data.delivered) {
+        toast('No players are online — message was not sent.', { kind: 'info' });
+        return;
+      }
       appendMessage(data);
       input.value = '';
       updatePreview();

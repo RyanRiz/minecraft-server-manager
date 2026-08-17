@@ -55,6 +55,17 @@ async function assertRunning(serverId) {
   }
 }
 
+function deliveryFromRconOutput(output) {
+  const out = cleanText(output);
+  // tellraw @a has no recipient when the server is empty. That is an expected
+  // state, not an RCON/API failure; the caller can show a friendly notice.
+  if (/No player was found/i.test(out)) return { delivered: false, reason: 'no-players' };
+  if (out.trim() && /Unknown or incomplete|Incorrect argument|Expected|<--\[HERE\]/i.test(out)) {
+    throw httpError(502, `The server rejected the message: ${out.split('\n')[0]}`);
+  }
+  return { delivered: true };
+}
+
 /** Send an admin chat message. Returns the sent message (for the panel's chat log). */
 async function sendChat(serverId, opts = {}) {
   const text = String(opts.text || '')
@@ -75,10 +86,8 @@ async function sendChat(serverId, opts = {}) {
     cmd = ['tellraw', target, JSON.stringify(buildComponent({ ...opts, text }))];
   }
 
-  const out = cleanText(await execCapture(serverId, ['rcon-cli', ...cmd]));
-  if (out.trim() && /Unknown or incomplete|Incorrect argument|Expected|No player was found|<--\[HERE\]/i.test(out)) {
-    throw httpError(502, `The server rejected the message: ${out.split('\n')[0]}`);
-  }
+  const delivery = deliveryFromRconOutput(await execCapture(serverId, ['rcon-cli', ...cmd]));
+  if (!delivery.delivered) return delivery;
 
   const message = {
     mode,
@@ -100,7 +109,7 @@ async function sendChat(serverId, opts = {}) {
     summary: `Chat (${mode}) → ${target}: ${text.slice(0, 80)}`,
     details: { ...message, text: text.slice(0, 300) },
   });
-  return { ...message, actor, ts: new Date().toISOString() };
+  return { ...message, actor, ts: new Date().toISOString(), delivered: true };
 }
 
-module.exports = { sendChat, buildComponent, normalizeTarget, COLORS, FORMATS };
+module.exports = { sendChat, buildComponent, normalizeTarget, deliveryFromRconOutput, COLORS, FORMATS };

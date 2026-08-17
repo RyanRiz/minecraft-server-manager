@@ -37,3 +37,9 @@ test('normalizeTarget accepts Bedrock (Geyser/Floodgate) names with a leading . 
   assert.equal(chat.normalizeTarget('.Steve'), '.Steve');
   assert.equal(chat.normalizeTarget('*Alex'), '*Alex');
 });
+
+test('empty-server tellraw output becomes a normal undelivered result', () => {
+  assert.deepEqual(chat.deliveryFromRconOutput('No player was found'), { delivered: false, reason: 'no-players' });
+  assert.deepEqual(chat.deliveryFromRconOutput(''), { delivered: true });
+  assert.throws(() => chat.deliveryFromRconOutput('Unknown or incomplete command'), { status: 502 });
+});
