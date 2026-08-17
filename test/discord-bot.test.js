@@ -152,3 +152,8 @@ test('panel chat relays to Discord while Discord-originated chat cannot echo bac
     discordBot.bot.queue.clear();
   }
 });
+
+test('Minecraft lifecycle notification waits for the actual ready log line', () => {
+  assert.equal(discordBot.minecraftReady('[12:00:00] [Server thread/INFO]: Done (3.123s)! For help, type "help"'), true);
+  assert.equal(discordBot.minecraftReady('[12:00:00] [main/INFO]: Loading Fabric'), false);
+});

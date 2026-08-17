@@ -22,6 +22,7 @@ const servers = require('../services/servers');
 const players = require('../services/players');
 const chat = require('../services/chat');
 const { execCapture, inspectStatus } = require('../docker/containers');
+const { fetchLogs } = require('../docker/logs');
 const events = require('../events');
 const { recordEvent } = events;
 const { cleanText } = require('../utils/ansi');
@@ -60,6 +61,13 @@ const SETTING_KEYS = {
 };
 
 const restartJobs = new Map();
+const LIFECYCLE_POLL_MS = 5000;
+const LIFECYCLE_TIMEOUT_MS = 15 * 60 * 1000;
+
+function minecraftReady(logs) {
+  return /Done \([^\n]*\)! For help, type "help"/i.test(String(logs || ''));
+}
+
 function plainMotd(value, fallback) {
   const motd = cleanText(String(value || fallback || '')).replace(/&[0-9a-fk-or]/gi, '').trim();
   return motd ? motd.slice(0, 1024) : 'Not set';
@@ -264,6 +272,7 @@ class DiscordBot {
     this.breakers = new Map();
     this.queue = new Map();
     this.lastLifecycle = new Map();
+    this.lifecycleProbes = new Map();
     this.unsubscribePanel = null;
     this.unsubscribePlayer = null;
   }
@@ -379,6 +388,8 @@ class DiscordBot {
     this.breakers.clear();
     this.queue.clear();
     this.lastLifecycle.clear();
+    for (const probe of this.lifecycleProbes.values()) clearTimeout(probe.timer);
+    this.lifecycleProbes.clear();
     if (this.client) {
       try { this.client.destroy(); } catch { /* already disconnected */ }
       this.client = null;
@@ -603,12 +614,53 @@ class DiscordBot {
       if (!text) return;
       return this.queueChat(event.server_id, { player: `Panel: ${event.actor || 'system'}`, message: text });
     }
-    const map = { started: 'serverStart', stopped: 'serverStop', 'backup-created': 'backupComplete' };
+    if (event.type === 'started') return this.scheduleLifecycleProbe(event.server_id, 'online');
+    if (event.type === 'stopped' || event.type === 'killed') return this.scheduleLifecycleProbe(event.server_id, 'offline');
+    const map = { 'backup-created': 'backupComplete' };
     const type = map[event.type];
     if (!type) return;
     const server = servers.getServer(event.server_id);
     if (!server) return;
     await this.notifyEvent(event.server_id, type, { server: server.display_name, summary: event.summary, actor: event.actor || 'system' });
+  }
+
+  scheduleLifecycleProbe(serverId, state) {
+    const current = this.lifecycleProbes.get(serverId);
+    if (current?.state === state) return;
+    if (current) clearTimeout(current.timer);
+    const probe = { state, startedAt: Date.now(), timer: null };
+    const run = async () => {
+      if (!this.isRunning || this.lifecycleProbes.get(serverId) !== probe) return;
+      try {
+        const info = await inspectStatus(serverId);
+        let ready = false;
+        if (state === 'online') {
+          // A container can be "running" while Fabric/Paper is still loading.
+          // Healthchecks are definitive when present; otherwise require the
+          // vanilla completion line before announcing the server as online.
+          if (info.exists && info.health === 'healthy') ready = true;
+          else if (info.exists && ['running', 'starting'].includes(info.status)) ready = minecraftReady(await fetchLogs(serverId, { tail: 80 }));
+        } else {
+          ready = !info.exists || info.status === 'stopped';
+        }
+        if (ready) {
+          this.lifecycleProbes.delete(serverId);
+          const server = servers.getServer(serverId);
+          if (server) await this.notifyEvent(serverId, state === 'online' ? 'serverStart' : 'serverStop', { server: server.display_name });
+          return;
+        }
+      } catch {
+        // Docker can briefly refuse inspect/log calls while it is reconciling.
+      }
+      if (Date.now() - probe.startedAt >= LIFECYCLE_TIMEOUT_MS) {
+        this.lifecycleProbes.delete(serverId);
+        return;
+      }
+      probe.timer = setTimeout(() => run().catch(() => {}), LIFECYCLE_POLL_MS);
+      probe.timer.unref?.();
+    };
+    this.lifecycleProbes.set(serverId, probe);
+    run().catch(() => {});
   }
 
   async handlePlayerEvent(event) {
@@ -694,6 +746,7 @@ module.exports = {
   KIND,
   DEFAULT_PERMISSIONS,
   DEFAULT_EVENTS,
+  minecraftReady,
   bot,
   autoStart,
   getConfig: getPublicConfig,
