@@ -257,6 +257,13 @@
         <span class="w-24 text-right font-mono text-sm" id="wz-quota-out">25 GB</span>
       </div>
     </div>
+    <div class="mt-4 rounded-md border border-line bg-raised p-3">
+      <label class="flex cursor-pointer items-center justify-between gap-3 text-sm font-medium"><span>Enable Bedrock/Geyser (UDP)</span><span class="msm-toggle"><input type="checkbox" id="wz-bedrock-enabled"><span></span></span></label>
+      <div class="mt-2 hidden" id="wz-bedrock-port-wrap">
+        <div class="font-mono text-sm text-link" id="wz-bedrock-port">Allocating UDP port…</div>
+        <p class="help">For Fabric with Geyser/Floodgate or another cross-platform mod. Uses UDP 19132 when free, then the next free UDP port.</p>
+      </div>
+    </div>
   </div>
 
   <div id="wz-advanced" class="mt-4 hidden space-y-3">

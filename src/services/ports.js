@@ -5,6 +5,7 @@
 // "taken" if any DB server claims it OR the OS reports it in use.
 
 const net = require('node:net');
+const dgram = require('node:dgram');
 const db = require('../db');
 const config = require('../config');
 
@@ -16,6 +17,18 @@ function probe(port, host = '0.0.0.0') {
     srv.listen({ port, host, exclusive: true }, () => {
       srv.close(() => resolve(true));
     });
+  });
+}
+
+function probeUdp(port, host = '0.0.0.0') {
+  return new Promise((resolve) => {
+    const socket = dgram.createSocket('udp4');
+    socket.unref();
+    socket.once('error', () => {
+      socket.close();
+      resolve(false);
+    });
+    socket.bind({ port, address: host, exclusive: true }, () => socket.close(() => resolve(true)));
   });
 }
 
@@ -51,6 +64,23 @@ async function isPortFree(port) {
   return probe(port);
 }
 
+async function isUdpPortFree(port) {
+  if (!Number.isInteger(port)) return false;
+  if (port < 1024 || port > 65535) return false;
+  if (dbPortsInUse().has(port)) return false;
+  return probeUdp(port);
+}
+
+async function suggestBedrockPort() {
+  const used = dbPortsInUse();
+  let port = config.ports.bedrockStart;
+  while (used.has(port) || !(await probeUdp(port))) {
+    port += 1;
+    if (port > 65000) throw new Error('No free Bedrock ports available');
+  }
+  return port;
+}
+
 /** Suggest a { game, rcon } pair (and bedrock when requested). */
 async function suggestPorts({ withBedrock = false } = {}) {
   const used = dbPortsInUse();
@@ -62,15 +92,8 @@ async function suggestPorts({ withBedrock = false } = {}) {
     if (game > 65000) throw new Error('No free game ports available');
   }
   const result = { game, rcon: game + config.ports.rconOffset, bedrock: null };
-  if (withBedrock) {
-    let b = config.ports.bedrockStart;
-    while (used.has(b) || !(await probe(b))) {
-      b += 1;
-      if (b > 65000) throw new Error('No free Bedrock ports available');
-    }
-    result.bedrock = b;
-  }
+  if (withBedrock) result.bedrock = await suggestBedrockPort();
   return result;
 }
 
-module.exports = { isPortFree, suggestPorts };
+module.exports = { isPortFree, isUdpPortFree, suggestBedrockPort, suggestPorts };

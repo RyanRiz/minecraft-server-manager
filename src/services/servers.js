@@ -14,7 +14,7 @@ const { dataPath } = require('../storage/pathGuard');
 const { recordEvent } = require('../events');
 const secrets = require('./secrets');
 const { pickJavaTag } = require('./javaMatrix');
-const { suggestPorts, isPortFree } = require('./ports');
+const { suggestPorts, suggestBedrockPort, isPortFree, isUdpPortFree } = require('./ports');
 const containers = require('../docker/containers');
 const images = require('../docker/images');
 const { fetchLogs } = require('../docker/logs');
@@ -242,13 +242,14 @@ async function createServerImpl(input, { actor = 'system', start = false, onProg
     // The RCON port is derived when not given explicitly — validate the
     // DERIVED value too, or an explicit game port skips collision checks.
     const rcon = input.portRcon || input.portGame + config.ports.rconOffset;
+    const bedrock = input.portBedrock || (input.withBedrock ? await suggestBedrockPort() : null);
     const toCheck = [input.portGame, rcon];
-    if (input.portBedrock) toCheck.push(input.portBedrock);
     if (input.portQuery) toCheck.push(input.portQuery);
     for (const p of toCheck) {
       if (!(await isPortFree(p))) throw httpError(400, `Port ${p} is already in use or invalid`);
     }
-    ports = { game: input.portGame, rcon, bedrock: input.portBedrock || null };
+    if (bedrock && !(await isUdpPortFree(bedrock))) throw httpError(400, `UDP port ${bedrock} is already in use or invalid`);
+    ports = { game: input.portGame, rcon, bedrock };
   } else {
     ports = await suggestPorts({ withBedrock: Boolean(input.withBedrock) });
   }

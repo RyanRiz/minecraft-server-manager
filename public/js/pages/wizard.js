@@ -152,6 +152,7 @@ function init() {
   const browser = initModBrowser();
   const packPicker = initPackPicker();
   initPortCheck();
+  initBedrockPort();
   refreshPanels();
 
   // Deep link from the pack browser / details modal:
@@ -207,11 +208,14 @@ function init() {
 
   function resources() {
     const heapMb = Number(document.getElementById('wz-ram').value);
+    const withBedrock = document.getElementById('wz-bedrock-enabled')?.checked;
+    const portBedrock = Number(document.getElementById('wz-bedrock-port')?.dataset.port) || undefined;
     return {
       heapMb,
       containerMemoryMb: Math.round((heapMb * 1.5) / 512) * 512,
       diskQuotaGb: Number(document.getElementById('wz-quota').value),
       portGame: Number(document.getElementById('wz-port').value) || undefined,
+      ...(withBedrock ? { withBedrock: true, ...(portBedrock ? { portBedrock } : {}) } : {}),
     };
   }
 
@@ -233,6 +237,8 @@ function init() {
       heapMb: r.heapMb,
       containerMemoryMb: r.containerMemoryMb,
       portGame: r.portGame,
+      portBedrock: r.portBedrock,
+      withBedrock: r.withBedrock,
       env: collectSimpleEnv(),
       ...collectDockerOverrides(),
     };
@@ -512,6 +518,36 @@ function initPortCheck() {
       setHelp('Could not check the port right now.', 'text-ink-faint');
     }
   }
+}
+
+function initBedrockPort() {
+  const toggle = document.getElementById('wz-bedrock-enabled');
+  const wrap = document.getElementById('wz-bedrock-port-wrap');
+  const output = document.getElementById('wz-bedrock-port');
+  if (!toggle || !wrap || !output) return;
+  let requestId = 0;
+  async function refresh() {
+    wrap.classList.toggle('hidden', !toggle.checked);
+    if (!toggle.checked) {
+      delete output.dataset.port;
+      return;
+    }
+    const id = ++requestId;
+    output.textContent = 'Allocating UDP port…';
+    try {
+      const res = await fetch('/api/ports/suggest?bedrock=true');
+      const data = await res.json();
+      if (!res.ok || !data.ok || !data.ports?.bedrock) throw new Error(data.error || 'No UDP port available');
+      if (id !== requestId || !toggle.checked) return;
+      output.dataset.port = String(data.ports.bedrock);
+      output.textContent = `UDP ${data.ports.bedrock} assigned`;
+    } catch (error) {
+      if (id !== requestId || !toggle.checked) return;
+      delete output.dataset.port;
+      output.textContent = `Could not suggest a UDP port: ${error.message}`;
+    }
+  }
+  toggle.addEventListener('change', refresh);
 }
 
 // ---- From-mods: loader-first browser ----------------------------------------
