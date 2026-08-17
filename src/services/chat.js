@@ -86,7 +86,10 @@ async function sendChat(serverId, opts = {}) {
     cmd = ['tellraw', target, JSON.stringify(buildComponent({ ...opts, text }))];
   }
 
-  const delivery = deliveryFromRconOutput(await execCapture(serverId, ['rcon-cli', ...cmd]));
+  // Keep the JSON tellraw component after the `--` command separator. This is
+  // the same rcon-cli invocation used by the console and prevents arguments
+  // from being parsed as rcon-cli options instead of Minecraft command text.
+  const delivery = deliveryFromRconOutput(await execCapture(serverId, ['rcon-cli', '--', ...cmd]));
   if (!delivery.delivered) return delivery;
 
   const message = {

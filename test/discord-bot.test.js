@@ -121,3 +121,34 @@ test('/status renders the detailed server embed without a website field', async 
   assert.equal(embed.thumbnail, undefined);
   assert.equal(reply.files, undefined);
 });
+
+test('panel chat relays to Discord while Discord-originated chat cannot echo back', async () => {
+  const sent = [];
+  const originalSendChannel = discordBot.bot.sendChannel;
+  discordBot.bot.queue.clear();
+  discordBot.bot.sendChannel = async (channelId, message) => {
+    sent.push({ channelId, message });
+    return true;
+  };
+  try {
+    await discordBot.bot.handlePanelEvent({
+      server_id: 'srv_bot01',
+      actor: 'admin',
+      type: 'chat-sent',
+      details: { text: 'Hello from the panel' },
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(sent, [{ channelId: '234567890123456789', message: '**<Panel: admin>** Hello from the panel' }]);
+
+    await discordBot.bot.handlePanelEvent({
+      server_id: 'srv_bot01',
+      actor: 'discord:123456789',
+      type: 'chat-sent',
+      details: { text: 'Must not echo' },
+    });
+    assert.equal(sent.length, 1);
+  } finally {
+    discordBot.bot.sendChannel = originalSendChannel;
+    discordBot.bot.queue.clear();
+  }
+});

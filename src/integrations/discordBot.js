@@ -594,6 +594,15 @@ class DiscordBot {
 
   async handlePanelEvent(event) {
     if (!event?.server_id) return;
+    // `tellraw` is sent directly to game clients and does not create a normal
+    // Minecraft chat-log entry. Relay panel-originated chat explicitly, while
+    // excluding Discord-originated messages to avoid an echo loop.
+    if (event.type === 'chat-sent') {
+      if (String(event.actor || '').startsWith('discord:')) return;
+      const text = String(event.details?.text || '').trim();
+      if (!text) return;
+      return this.queueChat(event.server_id, { player: `Panel: ${event.actor || 'system'}`, message: text });
+    }
     const map = { started: 'serverStart', stopped: 'serverStop', 'backup-created': 'backupComplete' };
     const type = map[event.type];
     if (!type) return;
