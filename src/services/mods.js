@@ -32,6 +32,11 @@ function cachedIconUrl(lib) {
   return CACHED_ICON_FILE.test(file) ? `/api/icons/mods/${encodeURIComponent(file)}` : null;
 }
 
+function modrinthProjectUrl(lib) {
+  if (lib?.platform !== 'modrinth' || !lib.project_id) return null;
+  return `https://modrinth.com/project/${encodeURIComponent(String(lib.project_id))}`;
+}
+
 // Content filenames must be bare names inside the server's content dir. dataPath()
 // only guarantees containment within DATA_DIR, so a `file` like "../../../panel.db"
 // would still resolve (escaping the server dir to a panel-internal file). Reject any
@@ -119,6 +124,7 @@ async function listContent(serverId) {
       disabledVia: row && row.managed_by === 'pack' && !isDisabled ? null : undefined,
       sharedWith: lib ? library.usageCount(lib.id) : null,
       iconUrl: cachedIconUrl(lib) || (lib && lib.icon_url) || (row && row.icon_url) || null,
+      modrinthUrl: modrinthProjectUrl(lib),
       updateAvailable: updateFor(row),
     });
   }
@@ -138,6 +144,7 @@ async function listContent(serverId) {
         missing: true,
         sharedWith: null,
         iconUrl: row.icon_url,
+        modrinthUrl: null,
       });
     }
   }
@@ -561,6 +568,7 @@ module.exports = {
   loaderOf,
   isPackServer,
   parseModsNeedDownload,
+  modrinthProjectUrl,
   pendingDownloads,
   pendingExcludeToken,
   excludePackMod,

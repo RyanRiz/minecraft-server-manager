@@ -81,6 +81,9 @@
             </td>
             <td class="text-right">
               <div class="inline-flex gap-1">
+                {{#if modrinthUrl}}
+                  <a class="btn btn-ghost btn-sm" href="{{modrinthUrl}}" target="_blank" rel="noopener" data-tip="Open on Modrinth" aria-label="Open {{name}} on Modrinth">{{{icon 'external-link' 'size-3.5'}}}</a>
+                {{/if}}
                 {{#if updateAvailable}}
                   <button class="btn btn-ghost btn-sm text-warn" data-mod-update data-tip="Update to {{updateAvailable}}">{{{icon 'circle-arrow-up' 'size-3.5'}}} Update</button>
                 {{/if}}

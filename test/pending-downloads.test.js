@@ -27,6 +27,12 @@ test('parseModsNeedDownload ignores header, separator and blank lines', () => {
   assert.deepEqual(mods.parseModsNeedDownload('Mod   Version   Filename   Download page\n===   ===   ===   ===\n'), []);
 });
 
+test('Modrinth project links are only created from trusted Modrinth metadata', () => {
+  assert.equal(mods.modrinthProjectUrl({ platform: 'modrinth', project_id: 'AABBccDD' }), 'https://modrinth.com/project/AABBccDD');
+  assert.equal(mods.modrinthProjectUrl({ platform: 'curseforge', project_id: '1234' }), null);
+  assert.equal(mods.modrinthProjectUrl({ platform: 'modrinth' }), null);
+});
+
 test('parseModsNeedDownload handles a page URL without a /download/<id> suffix', () => {
   const rows = mods.parseModsNeedDownload(
     'Some Mod  some-mod-1.0  some-mod-1.0.jar  https://www.curseforge.com/minecraft/mc-mods/some-mod'
