@@ -489,6 +489,23 @@ class DiscordBot {
     const playerMax = live.players?.max ?? (Number(server.env?.MAX_PLAYERS) || 20);
     const playerNames = (live.players?.names || []).map((name) => `• ${escapeMarkdown(name)}`).join('\n');
     const address = settings.publicAddress(server.port_game);
+    const bedrockAddress = server.port_bedrock ? settings.publicAddress(server.port_bedrock) : null;
+    const addressFields = [
+      {
+        name: 'SERVER ADDRESS (JAVA / TCP)',
+        value: address ? `\`${address}\`` : `Port \`${server.port_game}\` (public host not configured)`,
+        inline: false,
+      },
+    ];
+    if (server.port_bedrock) {
+      addressFields.push({
+        name: 'BEDROCK ADDRESS (UDP)',
+        value: bedrockAddress
+          ? `\`${bedrockAddress}\`\nUse this address in Minecraft Bedrock Edition.`
+          : `Port \`${server.port_bedrock}\` (UDP; public host not configured)\nUse this address in Minecraft Bedrock Edition.`,
+        inline: false,
+      });
+    }
     const embed = new EmbedBuilder()
       .setTitle(`Minecraft Server: ${server.display_name}`)
       .setColor(['running', 'starting', 'unhealthy'].includes(server.status) ? 0x3fa62b : 0xe5484d)
@@ -496,11 +513,7 @@ class DiscordBot {
         { name: 'STATUS', value: statusText(server), inline: true },
         { name: 'PLAYERS', value: `${playerCount}/${playerMax}${playerNames ? `\n${playerNames}` : '\nNo players online'}`, inline: true },
         { name: 'MOTD', value: plainMotd(server.env?.MOTD, server.display_name), inline: false },
-        {
-          name: 'SERVER ADDRESS',
-          value: address ? `\`${address}\`` : `Port \`${server.port_game}\` (public host not configured)`,
-          inline: false,
-        },
+        ...addressFields,
         { name: 'VERSION', value: String(server.mc_version || 'Unknown').slice(0, 1024), inline: true }
       )
       .setFooter({ text: 'Checked at' })

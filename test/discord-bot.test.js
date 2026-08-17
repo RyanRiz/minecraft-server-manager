@@ -92,7 +92,7 @@ test('permissions are global and binding/event changes remain admin-only', async
 
 test('/status renders the detailed server embed without a website field', async () => {
   db.run(
-    "UPDATE servers SET status = 'running', mc_version = '1.21.5', env_json = ? WHERE id = ?",
+    "UPDATE servers SET status = 'running', mc_version = '1.21.5', port_bedrock = 19132, env_json = ? WHERE id = ?",
     JSON.stringify({ MAX_PLAYERS: '30', MOTD: '§aWholesome Minecraft Server' }),
     'srv_bot01'
   );
@@ -117,6 +117,9 @@ test('/status renders the detailed server embed without a website field', async 
   assert.match(fields.PLAYERS, /0\/30/);
   assert.equal(fields.MOTD, 'Wholesome Minecraft Server');
   assert.equal(fields.VERSION, '1.21.5');
+  assert.match(fields['SERVER ADDRESS (JAVA / TCP)'], /25599/);
+  assert.match(fields['BEDROCK ADDRESS (UDP)'], /19132/);
+  assert.match(fields['BEDROCK ADDRESS (UDP)'], /Bedrock Edition/);
   assert.equal(Object.hasOwn(fields, 'WEBSITE'), false);
   assert.equal(embed.thumbnail, undefined);
   assert.equal(reply.files, undefined);
