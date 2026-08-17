@@ -46,11 +46,16 @@ function init(serverId) {
 
   const filters = { INFO: true, WARN: true, ERROR: true };
   const filterInput = document.getElementById('console-filter');
+  const hideRconInput = document.getElementById('console-hide-rcon');
 
   function classify(text) {
     if (/\/(ERROR|FATAL)\]/.test(text)) return 'ERROR';
     if (/\/WARN\]/.test(text)) return 'WARN';
     return 'INFO';
+  }
+
+  function isRconNoise(text) {
+    return /\bRCON (?:Client|Listener)\b/i.test(text);
   }
 
   // ANSI SGR → colored spans (mc-image-helper and rcon-cli colorize output).
@@ -112,6 +117,7 @@ function init(serverId) {
     const level = classify(text);
     const div = document.createElement('div');
     div.dataset.level = level;
+    if (isRconNoise(text)) div.dataset.rcon = 'true';
     // Raw palette steps on purpose: the console is always dark, and the
     // semantic warn/danger tokens flip to 700-steps in light mode (invisible
     // here). See the .console note in input.css.
@@ -139,7 +145,8 @@ function init(serverId) {
         match = el.textContent.toLowerCase().includes(q.toLowerCase());
       }
     }
-    el.classList.toggle('hidden', !filters[el.dataset.level] || !match);
+    const hiddenRcon = hideRconInput?.checked && el.dataset.rcon === 'true';
+    el.classList.toggle('hidden', !filters[el.dataset.level] || !match || hiddenRcon);
   }
 
   function refilter() {
@@ -223,12 +230,17 @@ function init(serverId) {
   });
 
   if (filterInput) filterInput.addEventListener('input', refilter);
+  if (hideRconInput) hideRconInput.addEventListener('change', refilter);
   document.querySelectorAll('[data-level-filter]').forEach((cb) => {
     cb.addEventListener('change', () => {
       filters[cb.dataset.levelFilter] = cb.checked;
       refilter();
     });
   });
+  log.querySelectorAll('[data-level]').forEach((line) => {
+    if (isRconNoise(line.textContent)) line.dataset.rcon = 'true';
+  });
+  refilter();
 
   // The send control stays busy until the RCON response (cmd-result/error) or
   // ws ack arrives. Entries self-remove; a failsafe timeout catches lost acks.
